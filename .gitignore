@@ -1,0 +1,56 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved.bak
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+
+# Xcode / Instruments
+*.dSYM/
+*.dSYM.zip
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# Codegen output (re-generated; pinned in M1 via YK-179, YK-180, YK-181)
+# Keep generated files committed *once codegen is wired*; until then, treat as transient.
+Sources/QVACClient/Generated/
+!Sources/QVACClient/Generated/.gitkeep
+
+# Node (codegen toolchain under scripts/codegen/, YK-178)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Bare worker bundle artifacts (YK-207)
+worker.bundle/
+worker.bundle.js
+*.mobile.bundle.js
+
+# Local env / scratch
+.env
+.env.local
+.env.*.local
+.tmp/
+tmp/
+*.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# DocC build output (YK-215, YK-217)
+*.doccarchive
+.docc-build/
+
+# Coverage
+*.profraw
+*.profdata
+coverage/
+.coverage/

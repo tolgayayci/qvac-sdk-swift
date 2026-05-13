@@ -1,0 +1,23 @@
+QVACClient — native Swift client for Tether's QVAC SDK
+Copyright 2026 the QVACClient authors
+
+This product is licensed under the Apache License, Version 2.0 (the "License").
+You may obtain a copy of the License at:
+   http://www.apache.org/licenses/LICENSE-2.0
+
+------------------------------------------------------------
+Bundled and re-used third-party software:
+
+  * @qvac/sdk — Apache-2.0
+    https://github.com/tetherto/qvac
+    Wire protocol, error codes, and request/response schemas are
+    documented under docs/ and reproduced for code-generation purposes.
+
+  * bare-rpc, bare-rpc-swift, bare, bare-pipe, bare-kit, bare-kit-swift,
+    compact-encoding, compact-encoding-swift — Apache-2.0
+    https://github.com/holepunchto
+    Frame format and Swift API surface are documented under
+    docs/bare-rpc-wire-protocol.md. Linked via Swift Package Manager.
+
+This NOTICE file is provided for informational purposes only and does
+not modify the License.
