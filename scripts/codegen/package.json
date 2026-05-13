@@ -1,0 +1,29 @@
+{
+  "name": "@qvac-swift/codegen",
+  "private": true,
+  "version": "0.0.0",
+  "description": "TypeScript-Compiler-API harness that emits QVACClient Swift sources from @qvac/sdk type declarations.",
+  "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "run": "tsx src/index.ts",
+    "run:repro": "tsx src/index.ts && tsx src/index.ts && echo OK",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@qvac/sdk": "0.10.2",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.6",
+    "vitest": "1.6.1"
+  }
+}
