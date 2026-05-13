@@ -38,7 +38,7 @@ function getNextCommandId() {
 
 That counter is opaque to the SDK protocol layer. The Swift code-gen target is therefore:
 
-1. An enum of **string** `RequestType` discriminants (34 entries — see §6).
+1. An enum of **string** `RequestType` discriminants (31 entries — see §6).
 2. Generated `Codable` request/response structs keyed by the discriminant.
 
 Implication for `YK-181` (M1-CODEGEN-ERRORS): no `commands.js` to read; the codegen pipeline must walk `packages/sdk/schemas/*.ts` Zod schemas to enumerate types.
@@ -162,7 +162,7 @@ Purpose: tells the Bare worker to release env-bound state in native addons befor
 
 Swift implication: `QVACClient.close()` should send `__shutdown__` and wait for the success reply **before** killing the worker subprocess.
 
-## 6. Request Type Registry (34 Handlers)
+## 6. Request Type Registry (31 Handlers)
 
 Authoritative source: `packages/sdk/server/rpc/handler-registry.ts:75-158`. Each handler has a `type` discriminating its response style:
 
@@ -327,16 +327,16 @@ public struct QVACError: Error, Decodable {
 }
 ```
 
-### 8.2 Error code tables (4 ranges, ~114 codes)
+### 8.2 Error code tables (4 ranges, 128 codes)
 
-Codes are owned by 4 packages, each owning a numeric range:
+Codes are owned by 4 packages, each owning a numeric range. Counts below match `grep -cE '^\s+[A-Z_]+: [0-9]+' <file>` on the source — re-verify after any `@qvac/sdk` minor bump.
 
 | Range | Owner | Source file | Count |
 | --- | --- | --- | --- |
 | 0–999 | `@qvac/error` internal | `packages/error/index.js:39-47` | 6 |
-| 19,001–20,000 | `@qvac/registry-client` (re-exported subset) | `packages/sdk/schemas/sdk-errors-registry.ts:4-8` | 3 |
-| 50,001–52,000 | SDK Client | `packages/sdk/schemas/sdk-errors-client.ts:4-43` | 30 |
-| 52,001–54,000 | SDK Server | `packages/sdk/schemas/sdk-errors-server.ts:4-122` | 75 |
+| 19,001–20,000 | `@qvac/registry-client` (re-exported subset) | `packages/sdk/schemas/sdk-errors-registry.ts:4-8` | 3 visible (full set in `@qvac/registry-client`) |
+| 50,001–52,000 | SDK Client | `packages/sdk/schemas/sdk-errors-client.ts:4-43` | 28 |
+| 52,001–54,000 | SDK Server | `packages/sdk/schemas/sdk-errors-server.ts:4-122` | 91 |
 
 #### 8.2.1 `INTERNAL_ERROR_CODES` (`@qvac/error`)
 
