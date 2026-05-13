@@ -30,21 +30,40 @@ const log = (msg) => {
   if (debug) io.err.write(`[ping-server] ${msg}\n`)
 }
 
+// JSON-encoded replies — matches QVAC SDK wire convention (per
+// docs/qvac-sdk-internals.md §8) so the Swift `RPCBridge` can decode them
+// directly into Codable types.
 async function onRequest(req) {
   try {
     log(`RPC frame received: command=${req.command} id=${req.id} dataLen=${req.data?.length ?? 0}`)
     switch (req.command) {
-      case 1: // PING
-        await req.reply(Buffer.from('pong', 'utf8'))
+      case 1: { // PING
+        const seq = req.data?.length ? safeParseJson(req.data)?.seq : undefined
+        const body = { type: 'pong', seq }
+        await req.reply(Buffer.from(JSON.stringify(body), 'utf8'))
         break
-      case 2: // ECHO — reply with the request payload verbatim
-        await req.reply(req.data ?? Buffer.alloc(0))
+      }
+      case 2: { // ECHO — reply with `{type:"echo", echoed: <originalPayload>}`
+        const original = req.data?.length ? safeParseJson(req.data) : null
+        const body = { type: 'echo', echoed: original }
+        await req.reply(Buffer.from(JSON.stringify(body), 'utf8'))
         break
-      default:
-        await req.reply(Buffer.from(`echoed cmd ${req.command}`, 'utf8'))
+      }
+      default: {
+        const body = { type: 'echoed', command: req.command }
+        await req.reply(Buffer.from(JSON.stringify(body), 'utf8'))
+      }
     }
   } catch (err) {
     io.err.write(`[ping-server] handler error: ${err.message ?? err}\n`)
+  }
+}
+
+function safeParseJson(buf) {
+  try {
+    return JSON.parse(buf.toString('utf8'))
+  } catch {
+    return null
   }
 }
 

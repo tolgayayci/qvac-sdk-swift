@@ -26,7 +26,6 @@ public actor RPCBridge {
   private var rpc: BareRPC.RPC?
   private var delegate: TransportDelegate?
   private var readTask: Task<Void, Never>?
-  private var commandCounter: UInt = 0
   private(set) var isStarted = false
   private(set) var isClosed = false
 
@@ -58,6 +57,7 @@ public actor RPCBridge {
 
     let transportRef = transport
     let rpcRef = rpc
+    let bridgeRef = self
     readTask = Task {
       do {
         for try await chunk in transportRef.incoming {
@@ -65,10 +65,30 @@ public actor RPCBridge {
           await rpcRef.receive(chunk)
         }
       } catch {
-        // Transport errored — `rpc` will surface this to any in-flight
-        // continuations via its own failure path on next op.
+        // Transport read failed.
+      }
+      // Either path (throw or natural finish) means the transport is gone.
+      // bare-rpc-swift has no public way to surface a transport failure to
+      // its in-flight continuations, so we inject a force-fail frame: a
+      // 4-byte length prefix (0xFFFFFFFF) that exceeds the default
+      // maxFrameSize, triggering `RPC.fail(.frameTooLarge)`, which resumes
+      // every pending continuation with that error.
+      //
+      // We only do this if the bridge wasn't explicitly closed — otherwise
+      // close() already tore down references.
+      let stillOpen = await bridgeRef.bridgeNeedsForceFail()
+      if stillOpen {
+        let forceFail = Data([0xFF, 0xFF, 0xFF, 0xFF])
+        await rpcRef.receive(forceFail)
       }
     }
+  }
+
+  /// Read-loop callback: returns `true` when the loop has exited but the
+  /// bridge hasn't been explicitly closed (so pending continuations need
+  /// the force-fail injection above).
+  fileprivate func bridgeNeedsForceFail() -> Bool {
+    return isStarted && !isClosed
   }
 
   /// Tears the bridge down. Safe to call multiple times; further `send` /
@@ -93,10 +113,13 @@ public actor RPCBridge {
   ) async throws -> Res {
     let rpc = try requireOpen()
     let payload = try encoder.encode(req)
-    let cmd = nextCommand()
     let raw: Data?
     do {
-      raw = try await rpc.request(cmd, data: payload)
+      // Pass the caller-supplied `command` straight through to bare-rpc.
+      // It travels on the wire as the REQUEST frame's `command` field.
+      // QVAC's worker ignores this field for routing (it routes by JSON
+      // `data.type`); any other bare-rpc peer is free to dispatch on it.
+      raw = try await rpc.request(command, data: payload)
     } catch let remote as BareRPC.RPCRemoteError {
       throw mapRemoteError(remote)
     } catch is CancellationError {
@@ -145,11 +168,10 @@ public actor RPCBridge {
   ) async throws {
     let rpc = try requireOpen()
     let payload = try encoder.encode(req)
-    let cmd = nextCommand()
 
     let stream: BareRPC.IncomingStream
     do {
-      stream = try await rpc.requestWithResponseStream(command: cmd, data: payload)
+      stream = try await rpc.requestWithResponseStream(command: command, data: payload)
     } catch let remote as BareRPC.RPCRemoteError {
       throw mapRemoteError(remote)
     }
@@ -214,11 +236,6 @@ public actor RPCBridge {
       throw QVACError.transport(.framingError("RPCBridge.start() not called"))
     }
     return rpc
-  }
-
-  private func nextCommand() -> UInt {
-    commandCounter = (commandCounter % 0xFFFF_FFFE) + 1
-    return commandCounter
   }
 
   private func decodeResponseOrThrow<R: Decodable>(_ data: Data, as type: R.Type) throws -> R {
