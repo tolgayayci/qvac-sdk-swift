@@ -17,18 +17,12 @@ let package = Package(
     .package(
       url: "https://github.com/holepunchto/bare-rpc-swift.git",
       revision: "3983622"
-    ),
-    // bare-kit-swift — Swift wrapper for the in-process Bare worklet on
-    // iOS/macOS. Resolved + pinned now so M1 has a stable reference,
-    // but NOT linked from QVACClient: the package requires a separate
-    // native BareKit framework that is built/downloaded outside SPM,
-    // and the BareKitIPCTransport that consumes it lands in M2
-    // (YK-206). Promoting this to a real target dependency happens
-    // at that point.
-    .package(
-      url: "https://github.com/holepunchto/bare-kit-swift.git",
-      revision: "ef26bbd"
-    ),
+    )
+    // bare-kit-swift — intentionally not listed here in M1.
+    // Its native `BareKit` framework is built/downloaded outside SPM,
+    // and the consumer (`BareKitIPCTransport`) lands in YK-206. The
+    // intended pin (`ef26bbd`) is documented in `docs/dependencies.md`
+    // §"Current pins" and will be added to this list at that time.
   ],
   targets: [
     .target(
@@ -36,7 +30,11 @@ let package = Package(
       dependencies: [
         .product(name: "BareRPC", package: "bare-rpc-swift")
       ],
-      path: "Sources/QVACClient"
+      path: "Sources/QVACClient",
+      exclude: [
+        // Sidecar metadata for codegen-drift checks; not compiled.
+        "Generated/ErrorCodes.json"
+      ]
     ),
     .testTarget(
       name: "QVACClientTests",

@@ -9,7 +9,7 @@ reproducible across machines, across CI runs, and across milestone gates.
 | Dependency | Pin | Why |
 | --- | --- | --- |
 | `bare-rpc-swift` (SPM, GitHub) | `revision: "3983622"` (main HEAD as of YK-176) | Frame layer for the IPC duplex. This commit is `feat: bidirectional streams (#16)` and includes the backpressure / cork-uncork work from PR #13 (merged at `8405c6f`). No tagged releases exist yet — re-evaluate on next upstream tag. |
-| `bare-kit-swift` (SPM, GitHub) | `revision: "ef26bbd"` (main HEAD) | Resolved + pinned in `Package.resolved` for stability. NOT linked from the `QVACClient` target in M1 — it requires a separate native `BareKit` framework (built from `holepunchto/bare-kit`) that is not delivered via SPM. The dep is promoted to a real link in **YK-206** (`M2-TRANSPORT-BAREKIT — BareKitIPCTransport`). |
+| `bare-kit-swift` (SPM, GitHub) | **Not in `Package.swift` for M1.** Intended pin when added: `revision: "ef26bbd"` (main HEAD). | The package requires a separate native `BareKit` framework (built from `holepunchto/bare-kit`) that SPM does not deliver. Adding it as a dep before the consumer exists generates an "unused dependency" warning, so the dep is added in **YK-206** (`M2-TRANSPORT-BAREKIT — BareKitIPCTransport`) — at which point the native framework provisioning is also wired up. The intended pin is documented here so YK-206 has a known-good reference. |
 | `@qvac/sdk` (npm, codegen only) | `0.10.2` (exact) | Pinned in `scripts/codegen/package.json`. Drives every generated Swift file under `Sources/QVACClient/Generated/`. Bumping is a coordinated process: re-run codegen, refresh `docs/qvac-sdk-internals.md` (YK-175), re-verify all M1 VTs. |
 | `typescript` (npm, codegen only) | `5.9.3` (exact) | Matches the version upstream `tetherto/qvac` uses to build `@qvac/sdk`; avoids inferring different types from the same source. |
 | `tsx` (npm, codegen only) | `4.21.0` (exact) | TypeScript-aware Node CLI runner for the codegen harness. |
@@ -29,9 +29,11 @@ Snapshot from `swift package show-dependencies` at M1:
 
 ```
 QVACClient
-├── BareRPC      (holepunchto/bare-rpc-swift @ 3983622)
-│   └── CompactEncoding   (holepunchto/compact-encoding-swift @ main)
-└── BareKit      (holepunchto/bare-kit-swift @ ef26bbd)   [resolved, not linked]
+└── BareRPC      (holepunchto/bare-rpc-swift @ 3983622)
+    └── CompactEncoding   (holepunchto/compact-encoding-swift @ main)
+
+# YK-206 (M2) will add:
+# └── BareKit   (holepunchto/bare-kit-swift @ ef26bbd, plus native BareKit framework)
 ```
 
 ## Version-bump policy

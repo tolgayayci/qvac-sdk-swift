@@ -14,10 +14,10 @@ xcuserdata/
 *.xcscmblueprint
 *.xccheckout
 
-# Codegen output (re-generated; pinned in M1 via YK-179, YK-180, YK-181)
-# Keep generated files committed *once codegen is wired*; until then, treat as transient.
-Sources/QVACClient/Generated/
-!Sources/QVACClient/Generated/.gitkeep
+# Codegen output is COMMITTED so consumers don't need pnpm+@qvac/sdk to build.
+# YK-194 CI re-runs codegen and fails on any non-empty git diff — the lockfile
+# in scripts/codegen/pnpm-lock.yaml + the pin in scripts/codegen/package.json
+# guarantee deterministic regeneration.
 
 # Node (codegen toolchain under scripts/codegen/, YK-178)
 node_modules/

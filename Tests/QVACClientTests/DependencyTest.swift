@@ -11,11 +11,12 @@ final class DependencyTest: XCTestCase {
     XCTAssertNotNil(probe)
   }
 
-  /// `BareKit` is pinned in `Package.swift` but not yet a build-time
-  /// dependency of `QVACClient` (see YK-206 for the in-process worklet
-  /// transport that will consume it). Until then, only the pin itself
-  /// is verified — through `Package.resolved`, not at the swift-test
-  /// layer.
+  /// `bare-kit-swift` is intentionally NOT listed in `Package.swift` for
+  /// M1. Its native `BareKit` framework is not delivered via SPM, and
+  /// adding the package as a pin-only dep generates an "unused dependency"
+  /// SPM warning. The intended pin (`ef26bbd`) is documented in
+  /// `docs/dependencies.md` and added to `Package.swift` at YK-206
+  /// alongside `BareKitIPCTransport`.
   func testBareKitDeferredToYK206() {
     // Intentional no-op; documents the M1 vs M2 split.
     XCTAssertTrue(true)

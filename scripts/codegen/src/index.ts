@@ -2,6 +2,7 @@
 import ts from "typescript";
 
 import { parseCliOptions, usage } from "./cli.js";
+import { emitErrorCodes, loadErrorCodesFromPackage } from "./emit/errors.js";
 import { listEntryExports, parseSdk, type ParsedSdk } from "./parse.js";
 
 /**
@@ -69,9 +70,32 @@ export async function main(argv: readonly string[]): Promise<number> {
   }
 
   process.stdout.write(`${reportHarnessFindings(parsed)}\n`);
-  process.stdout.write(`✓ Codegen harness OK — output dir: ${options.outDir}\n`);
 
-  // YK-179, YK-180, YK-181 will plug real emit passes in here.
+  // YK-181 — emit ErrorCodes.swift.
+  try {
+    const { clientCodes, serverCodes } = await loadErrorCodesFromPackage();
+    const result = emitErrorCodes(
+      {
+        clientCodes,
+        serverCodes,
+        packageName: parsed.packageName,
+        packageVersion: parsed.packageVersion,
+      },
+      options.outDir,
+    );
+    process.stdout.write(
+      `  ErrorCodes.swift  ${result.clientCount} client + ${result.serverCount} server codes\n`,
+    );
+  } catch (err) {
+    process.stderr.write(
+      `error: emitErrorCodes failed: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return 1;
+  }
+
+  process.stdout.write(`✓ Codegen complete → ${options.outDir}\n`);
+
+  // YK-179, YK-180 plug their emit passes in here.
   return 0;
 }
 
