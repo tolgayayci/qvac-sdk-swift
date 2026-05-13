@@ -1,0 +1,22 @@
+{
+  "name": "qvac-swift-ping-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Minimal Bare worker fixture for YK-191 / YK-192 integration tests. Listens on a UDS, answers PING with a fixed pong frame, and exits on stdin EOF.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "bare server.mjs",
+    "start:debug": "QVAC_FIXTURE_DEBUG=1 bare server.mjs"
+  },
+  "dependencies": {
+    "bare-buffer": "3.6.0",
+    "bare-fs": "4.5.1",
+    "bare-pipe": "1.0.6",
+    "bare-rpc": "1.3.1",
+    "bare-runtime": "1.28.5",
+    "bare-stdio": "1.0.3"
+  }
+}
