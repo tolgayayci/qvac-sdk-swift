@@ -27,17 +27,23 @@ final class QVACPeer: @unchecked Sendable {
     var failInitConfig: Bool = false
     /// Optional error message attached when `failInitConfig` is true.
     var initFailureMessage: String = "init config rejected by test peer"
+    /// ModelId returned by `loadModel` requests. Set per-test for the
+    /// happy path; if `nil`, `loadModel` replies with an SDK error
+    /// frame (`code: modelNotFound`).
+    var loadedModelId: String? = "test-model-abc"
 
     init(
       streamCount: Int = 10,
       streamIntervalMs: UInt64 = 5,
       failInitConfig: Bool = false,
-      initFailureMessage: String = "init config rejected by test peer"
+      initFailureMessage: String = "init config rejected by test peer",
+      loadedModelId: String? = "test-model-abc"
     ) {
       self.streamCount = streamCount
       self.streamIntervalMs = streamIntervalMs
       self.failInitConfig = failInitConfig
       self.initFailureMessage = initFailureMessage
+      self.loadedModelId = loadedModelId
     }
   }
 
@@ -141,6 +147,36 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
       let reply: [String: Any] = [
         "type": "cancel",
         "success": true,
+      ]
+      let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
+      await request.reply(data)
+
+    case "loadModel":
+      // YK-201. Reply with `{modelId, type: "loadModel"}` on the
+      // happy path; emit a wire SDK error frame (code 52001 =
+      // MODEL_NOT_FOUND) when `loadedModelId` is nil.
+      let body: [String: Any]
+      if let id = behavior.loadedModelId {
+        body = ["type": "loadModel", "modelId": id]
+      } else {
+        body = [
+          "type": "error",
+          "code": 52002,  // QVACServerErrorCode.modelNotFound
+          "name": "MODEL_NOT_FOUND",
+          "message": "test peer: loadedModelId is nil",
+        ]
+      }
+      let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
+      await request.reply(data)
+
+    case "unloadModel":
+      // YK-201. Reply with the UnloadModelResponse shape
+      // (`{type: "unloadModel", success: true, modelId: <echoed>}`).
+      let runIdEcho = body?["modelId"] as? String ?? ""
+      let reply: [String: Any] = [
+        "type": "unloadModel",
+        "success": true,
+        "modelId": runIdEcho,
       ]
       let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
       await request.reply(data)
