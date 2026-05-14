@@ -1,0 +1,92 @@
+%%{ init: { "theme": "neutral", "flowchart": { "htmlLabels": false, "curve": "linear" } } }%%
+flowchart TB
+  %% ==== Color-blind-friendly Okabe-Ito palette ====
+  %% blue #56B4E9  orange #E69F00  green #009E73  gray #999999  pink #CC79A7
+
+  classDef app        fill:#56B4E9,stroke:#1B4965,stroke-width:1.5px,color:#0B2638
+  classDef swift      fill:#E6E6E6,stroke:#444,stroke-width:1.2px,color:#000
+  classDef transport  fill:#E69F00,stroke:#7C5500,stroke-width:1.5px,color:#1F1300
+  classDef framing    fill:#CC79A7,stroke:#612845,stroke-width:1.5px,color:#1F0813
+  classDef bare       fill:#009E73,stroke:#003A2A,stroke-width:1.5px,color:#E8FFF7
+  classDef addon      fill:#999999,stroke:#333,stroke-width:1.2px,color:#0F0F0F
+  classDef ghost      fill:#FFFFFF,stroke:#BBBBBB,stroke-dasharray:4 4,color:#666
+
+  %% ==== Layer 1 — Your app ====
+  subgraph L1[" Your app "]
+    direction LR
+    AppCLI["macOS / Linux CLI<br/>or daemon"]:::app
+    AppGUI["SwiftUI app<br/>iOS or macOS"]:::app
+  end
+
+  %% ==== Layer 2 — Public Swift surface ====
+  subgraph L2[" QVACClient — public Swift surface "]
+    direction LR
+    Client["QVACClient (actor)<br/>40 methods<br/>async / AsyncThrowingStream"]:::swift
+    Models["Generated DTOs<br/>26 Codable types"]:::swift
+    Errors["QVACError<br/>+ 116 wire codes"]:::swift
+  end
+
+  %% ==== Layer 3 — Framing ====
+  subgraph L3[" Framing — bare-rpc-swift "]
+    direction LR
+    Bridge["RPCBridge (actor)<br/>send  /  streamResponse"]:::framing
+    RPC["BareRPC.RPC<br/>length-prefixed framing<br/>OPEN / DATA / END / PAUSE"]:::framing
+  end
+
+  %% ==== Layer 4 — Transport (dual) ====
+  subgraph L4[" Transport — dual "]
+    direction LR
+    UDS["UDSTransport<br/>NWConnection .unix<br/>macOS  /  Linux"]:::transport
+    BareKit["BareKitIPCTransport<br/>in-process worklet<br/>iOS  /  macOS apps<br/>YK-206 / M2"]:::transport
+  end
+
+  %% ==== Layer 5 — Bare worker ====
+  subgraph L5[" Bare worker (Node / Bare runtime) "]
+    direction LR
+    ExtBare["External Bare process<br/>spawned by the app"]:::bare
+    EmbBare["Embedded Bare worklet<br/>bundled SPM resource"]:::bare
+    QVACSDK["@qvac/sdk<br/>handler-registry<br/>31 request types"]:::bare
+  end
+
+  %% ==== Layer 6 — Native addons ====
+  subgraph L6[" QVAC native addons "]
+    direction LR
+    LLM["LLM<br/>llama.cpp"]:::addon
+    Diff["Diffusion<br/>Stable Diffusion"]:::addon
+    Whisper["Whisper<br/>+ TTS"]:::addon
+    OCR["OCR / Translate<br/>Bergamot"]:::addon
+    RAG["RAG<br/>embeddings + index"]:::addon
+  end
+
+  %% ==== Edges ====
+  AppCLI --> Client
+  AppGUI --> Client
+
+  Client --> Models
+  Client --> Errors
+  Client --> Bridge
+
+  Bridge --> RPC
+
+  RPC --> UDS
+  RPC --> BareKit
+
+  UDS -. "unix socket" .-> ExtBare
+  BareKit -. "in-proc pipe" .-> EmbBare
+
+  ExtBare --> QVACSDK
+  EmbBare --> QVACSDK
+
+  QVACSDK --> LLM
+  QVACSDK --> Diff
+  QVACSDK --> Whisper
+  QVACSDK --> OCR
+  QVACSDK --> RAG
+
+  %% ==== Layer subgraph styling ====
+  style L1 fill:#F4F9FF,stroke:#56B4E9,stroke-width:1px,color:#1B4965
+  style L2 fill:#FAFAFA,stroke:#888,stroke-width:1px,color:#222
+  style L3 fill:#FBF3F8,stroke:#CC79A7,stroke-width:1px,color:#612845
+  style L4 fill:#FFF7E6,stroke:#E69F00,stroke-width:1px,color:#7C5500
+  style L5 fill:#EAF8F1,stroke:#009E73,stroke-width:1px,color:#003A2A
+  style L6 fill:#F2F2F2,stroke:#777,stroke-width:1px,color:#333

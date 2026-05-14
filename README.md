@@ -24,28 +24,20 @@ and custom plugins — without going through React Native or a JS bridge.
 | **M2** | 2026-06-08 | Full method surface (completion + streaming, transcribe/transcribeStream, translate, ocr, diffusion/upscale, textToSpeech/Stream, lifecycle). |
 | **M3** | 2026-06-22 | RAG (9 ops) + plugins, DocC catalog + tutorials, SwiftUI example app, Swift Package Index listing, v0.1.0 release. |
 
-## Architecture (sketch)
+## Architecture
 
-```
-+-------------------------+              IPC duplex (UDS or Bare-kit)              +-------------------+
-|   Your Swift app        |  <----------------------------------------------->     |  Bare worker      |
-|                         |                                                        |  (qvac/sdk        |
-|   import QVACClient     |       bare-rpc framing (binary frames)                 |   plugins +       |
-|                         |        +                                               |   native addons)  |
-|   let client = QVACClient.embedded()                                             |                   |
-|   try await client.loadModel(...)                                                |                   |
-|   for try await event in client.completion(...) { ... }                          |                   |
-+-------------------------+                                                        +-------------------+
-```
+![QVACClient architecture — Swift app → QVACClient → bare-rpc → dual transport → Bare worker → QVAC native addons](./docs/diagrams/architecture.svg)
 
-- **Transport layer**: `Transport` protocol (YK-183) with `UDSTransport` (Network.framework
-  `NWConnection .unix`) for desktop and `BareKitIPCTransport` for embedded iOS worklets.
-- **Frame layer**: [`bare-rpc-swift`](https://github.com/holepunchto/bare-rpc-swift) — pinned to
-  main and re-validated by our own fixture tests against the JS reference (`docs/bare-rpc-wire-protocol.md`).
-- **Protocol layer**: JSON envelopes over bare-rpc, dispatched by string `request.type`
-  (see `docs/qvac-sdk-internals.md`).
-- **API layer**: generated from the upstream TypeScript declarations of `@qvac/sdk` by a Node
-  tool (`scripts/codegen/`, YK-178+). CI enforces zero-diff regeneration on every PR.
+Six layers, top to bottom:
+
+1. **Your app** — `import QVACClient`. Works from a CLI, daemon, or SwiftUI app on macOS / iOS.
+2. **QVACClient public surface** — actor with 40 async methods, 26 generated `Codable` DTOs, `QVACError` mapping 116 wire codes.
+3. **Framing** — `RPCBridge` adapts [`bare-rpc-swift`](https://github.com/holepunchto/bare-rpc-swift) into Swift `async`/`await` + `AsyncThrowingStream`. Pinned at commit `3983622` (includes the bidirectional-streams PR #16). Frame layout documented in [`docs/bare-rpc-wire-protocol.md`](./docs/bare-rpc-wire-protocol.md).
+4. **Transport (dual)** — `UDSTransport` (Network.framework `NWConnection .unix`, macOS+Linux/CLI contexts); `BareKitIPCTransport` (in-process worklet via `holepunchto/bare-kit-swift`, iOS+macOS app contexts; lands in M2/YK-206). Both implement the same `Transport` protocol so the layers above don't care which is in use.
+5. **Bare worker** — `@qvac/sdk` running on the Bare runtime. External process when paired with UDS, embedded worklet (bundled SPM resource) when paired with BareKit. Dispatches by string `request.type`; per-method wire shapes documented in [`docs/qvac-sdk-internals.md`](./docs/qvac-sdk-internals.md).
+6. **QVAC native addons** — LLM (llama.cpp), Diffusion, Whisper + TTS, OCR + Bergamot translate, RAG. Upstream; we don't touch these.
+
+Diagram source + Mermaid version: [`docs/diagrams/`](./docs/diagrams/).
 
 ## Public API target
 
