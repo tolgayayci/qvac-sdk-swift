@@ -73,19 +73,22 @@
 
     // MARK: - embedded() stub
 
-    /// `QVACClient.embedded()` is signature-stubbed today (waits on
-    /// YK-206 BareKit). Calling throws a clear message.
-    func testEmbeddedFactoryIsStubbedUntilYK206() async {
+    /// `QVACClient.embedded()` body throws until the second-half of
+    /// YK-207 (the `qvac-worker.bundle` SPM resource produced by
+    /// `bare-pack`). The BareKit transport itself is wired (YK-206
+    /// → `BareKitIPCTransport`); the missing piece is the bundled
+    /// QVAC worker JS the transport hosts.
+    func testEmbeddedFactoryThrowsUntilBundleShips() async {
       do {
         _ = try await QVACClient.embedded()
-        XCTFail("expected embedded() to throw until YK-206 wires BareKit")
+        XCTFail("expected embedded() to throw until qvac-worker.bundle ships")
       } catch let err as QVACError {
         guard case .transport(.framingError(let msg)) = err else {
           return XCTFail("expected .transport(.framingError), got \(err)")
         }
         XCTAssertTrue(
-          msg.contains("YK-206"),
-          "error message should reference YK-206: \(msg)")
+          msg.contains("YK-207"),
+          "error message should reference YK-207 v2 (bundle pipeline): \(msg)")
       } catch {
         XCTFail("unexpected non-QVACError: \(error)")
       }

@@ -54,3 +54,7 @@ tmp/
 *.profdata
 coverage/
 .coverage/
+
+# YK-206 — BareKit.xcframework is downloaded locally via
+# scripts/download-barekit.sh, not committed. ~20MB.
+Vendor/BareKit.xcframework/

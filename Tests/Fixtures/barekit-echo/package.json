@@ -1,0 +1,10 @@
+{
+  "name": "qvac-barekit-echo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Minimal echo worklet for BareKitIPCTransport tests (YK-206). bare-pack-able.",
+  "type": "module",
+  "dependencies": {
+    "bare-ipc": "^1.0.0"
+  }
+}

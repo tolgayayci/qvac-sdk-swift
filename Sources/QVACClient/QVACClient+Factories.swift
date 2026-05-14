@@ -97,19 +97,40 @@
         client: client, process: process, server: server)
     }
 
-    /// In-process Bare worklet via `bare-kit-swift`. **Not wired
-    /// today** — depends on YK-206 (`M2-TRANSPORT-BAREKIT`) +
-    /// `bare-kit-swift` dependency + the bundled SPM resource. The
-    /// signature is committed now so M3 example-app and DocC code
-    /// can target it; calling throws until YK-206 lands.
+    /// In-process Bare worklet via `BareKitIPCTransport` (YK-206).
+    /// Loads a `bare-pack`-bundled QVAC worker (the
+    /// `qvac-worker.bundle` SPM resource produced by the second
+    /// half of YK-207) and connects to it without any subprocess.
+    ///
+    /// **Half-wired today.** The `BareKitIPCTransport` exists and
+    /// works as a `Transport`; the missing piece is the bundled
+    /// `qvac-worker.bundle` SPM resource that gives it a real
+    /// QVAC worker to host. Until that ships, this throws — but
+    /// the M3 example-app + DocC tutorials can already target the
+    /// signature. Pass a `bundleSource: Data` explicitly to
+    /// `BareKitIPCTransport(filename:bundleSource:)` to skip this
+    /// factory and run against your own bundle today.
     public static func embedded(
       initConfig: QVACInitConfig? = nil,
       runtimeContext: QVACRuntimeContext? = QVACRuntimeContext()
     ) async throws -> QVACClient {
+      // Resolving the bundled qvac-worker.bundle is the next step:
+      //   guard let bundleURL = Bundle.module.url(
+      //     forResource: "qvac-worker", withExtension: "bundle") else { ... }
+      //   let source = try Data(contentsOf: bundleURL)
+      //   let transport = BareKitIPCTransport(
+      //     filename: "qvac-worker", bundleSource: source)
+      //   let client = QVACClient(
+      //     transport: transport,
+      //     initConfig: initConfig,
+      //     runtimeContext: runtimeContext)
+      //   try await client.connect()
+      //   return client
       throw QVACError.transport(.framingError(
-        "QVACClient.embedded() is not yet wired — depends on YK-206 (BareKit transport). " +
-        "Use QVACClient.spawning(bareBinary:workerScript:) on macOS/Linux today; " +
-        "see docs/embedding.md."))
+        "QVACClient.embedded() needs the qvac-worker.bundle SPM resource (YK-207 v2). " +
+        "Today: construct BareKitIPCTransport(filename:bundleSource:) with your own " +
+        "bare-pack-bundled .bundle, OR use QVACClient.spawning(bareBinary:workerScript:) " +
+        "on macOS/Linux. See docs/barekit.md + docs/embedding.md."))
     }
 
     // MARK: - private
