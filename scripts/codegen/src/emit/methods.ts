@@ -25,8 +25,13 @@ export interface EmitMethodsResult {
  */
 const QVAC_METHODS: ReadonlyArray<MethodSpec> = [
   // Lifecycle
+  // QVAC's worker dispatches on the JSON envelope's `type` field, so the
+  // payload MUST carry it. Typed-DTO methods (e.g. UnloadModelRequest)
+  // already include a `type: String` field at the type level; the
+  // heartbeat literal injects it explicitly here.
   { name: "heartbeat", command: "heartbeat", mode: "reply",
-    request: { kind: "literal", swift: "[String: AnyCodable]", value: "([:] as [String: AnyCodable])" },
+    request: { kind: "literal", swift: "[String: AnyCodable]",
+      value: "([\"type\": AnyCodable(.string(\"heartbeat\"))] as [String: AnyCodable])" },
     response: { kind: "type", swift: "HeartbeatResponse" } },
   { name: "loadModel", command: "loadModel", mode: "reply",
     request: { kind: "anyCodable" }, response: { kind: "anyCodable" } },
@@ -44,7 +49,12 @@ const QVAC_METHODS: ReadonlyArray<MethodSpec> = [
   { name: "state", command: "state", mode: "reply",
     request: { kind: "type", swift: "StateRequest" },
     response: { kind: "type", swift: "StateResponse" } },
-  { name: "close", command: null, mode: "void", request: null, response: null },
+
+  // `close()` is hand-written on the QVACClient actor itself (it tears
+  // the transport + RPCBridge down — client-side lifecycle, not a wire
+  // request). The bounty-method table in CommandsAndMethodsTest.swift
+  // still tracks it with `wireCommand: nil` so the surface contract
+  // remains explicit.
 
   // Embed / Completion
   { name: "embed", command: "embed", mode: "reply",
@@ -179,16 +189,15 @@ export function emitMethods(input: { source: string }, outDir: string): EmitMeth
   out.push("");
   out.push("/// Public method surface. Every entry from `@qvac/sdk`'s exported");
   out.push("/// function list (`packages/sdk/index.ts:4-47`) gets a Swift-side");
-  out.push("/// counterpart on `QVACClient`. M1 only declares the surface — the");
-  out.push("/// runtime wiring (Transport setup, RPCBridge composition, JSON");
-  out.push("/// envelope construction with the correct `type` discriminator)");
-  out.push("/// lands in M2 (YK-197 QVACClient actor, YK-198 init handshake,");
-  out.push("/// YK-201..YK-205 per-method work).");
+  out.push("/// counterpart on `QVACClient`. Bodies route through the actor's");
+  out.push("/// internal `send` / `streamResponse` helpers (see");
+  out.push("/// `Sources/QVACClient/Support/QVACClient+SendStream.swift`), which");
+  out.push("/// in turn delegate to the `RPCBridge` set up by `connect()`.");
   out.push("///");
-  out.push("/// Until then, every body is a `fatalError(\"YK-201\")` placeholder —");
-  out.push("/// the surface compiles, downstream consumers can wire against it,");
-  out.push("/// and runtime callers are guaranteed to crash loudly so we never");
-  out.push("/// ship a silently-broken method.");
+  out.push("/// Per-method richer types (replacing the `AnyCodable` placeholders");
+  out.push("/// where the YK-179 allowlist doesn't cover the request/response");
+  out.push("/// yet) land in YK-201..YK-205. The surface itself is wired and");
+  out.push("/// callable from M2/YK-197.");
   out.push("extension QVACClient {");
   for (const m of sorted) {
     out.push("");
@@ -203,13 +212,12 @@ export function emitMethods(input: { source: string }, outDir: string): EmitMeth
 
 function emitMethodSignature(out: string[], method: MethodSpec): void {
   if (method.mode === "void") {
-    // close() — no command on the wire, no request/response.
-    out.push("  /// Tears down the client. Sends `__shutdown__` to the worker");
-    out.push("  /// (M2 — see docs/qvac-sdk-internals.md §5) and closes the transport.");
-    out.push(`  public func ${method.name}() async throws {`);
-    out.push(`    fatalError("YK-201 wires QVACClient.${method.name} to RPCBridge")`);
-    out.push("  }");
-    return;
+    // Unused since YK-197 — `close()` is hand-written on the actor.
+    // Kept as a fallthrough in case a future bounty method is genuinely
+    // client-only.
+    throw new Error(
+      `void-mode method "${method.name}" should be hand-written on QVACClient, not generated`,
+    );
   }
 
   const requestParam = formatRequestParam(method);
@@ -226,9 +234,8 @@ function emitMethodSignature(out: string[], method: MethodSpec): void {
         out.push("  /// the deferred set (see `docs/codegen-deferred.md`).");
       }
       out.push(`  public func ${method.name}(${requestParam}) async throws -> ${responseSwift} {`);
-      out.push(`    let _: ${responseSwift} = try await self.send(`);
+      out.push(`    return try await self.send(`);
       out.push(`      command: .${camelFromWire(command)}, ${requestValue})`);
-      out.push(`    fatalError("YK-201 wires QVACClient.send to RPCBridge")`);
       out.push("  }");
       break;
     }
@@ -236,7 +243,7 @@ function emitMethodSignature(out: string[], method: MethodSpec): void {
       const chunkSwift = formatResponseType(method);
       out.push(`  /// Routes wire command \`${command}\` (server-streamed response).`);
       out.push(
-        `  public func ${method.name}(${requestParam}) -> AsyncThrowingStream<${chunkSwift}, Error> {`,
+        `  public nonisolated func ${method.name}(${requestParam}) -> AsyncThrowingStream<${chunkSwift}, Error> {`,
       );
       out.push(`    return self.streamResponse(`);
       out.push(`      command: .${camelFromWire(command)}, ${requestValue})`);
@@ -247,7 +254,7 @@ function emitMethodSignature(out: string[], method: MethodSpec): void {
       out.push(`  /// Routes wire command \`${command}\` (duplex — request and`);
       out.push("  /// response streams both run). Full duplex API design lands in");
       out.push("  /// M2 (YK-202 / YK-204); M1 surfaces a single-stream stub.");
-      out.push(`  public func ${method.name}(${requestParam}) -> AsyncThrowingStream<AnyCodable, Error> {`);
+      out.push(`  public nonisolated func ${method.name}(${requestParam}) -> AsyncThrowingStream<AnyCodable, Error> {`);
       out.push(`    return self.streamResponse(`);
       out.push(`      command: .${camelFromWire(command)}, ${requestValue})`);
       out.push("  }");

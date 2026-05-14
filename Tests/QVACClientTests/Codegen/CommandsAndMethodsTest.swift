@@ -3,11 +3,11 @@ import XCTest
 @testable import QVACClient
 
 /// Covers `Commands.swift` (YK-180 part 1) and the generated method
-/// surface in `Client+Methods.swift` (YK-180 part 2). The method bodies
-/// are M2 stubs (`fatalError("YK-201")`), so the tests here are
-/// **compile-time existence + metadata checks only** — running any
-/// generated method would crash. That's intentional and acceptable for
-/// M1: surface complete, runtime intentionally fails loud.
+/// surface in `Client+Methods.swift` (YK-180 part 2). Bodies are wired
+/// from M2/YK-197 onward, so a generated method call really exercises
+/// the actor → bridge → transport stack — the assertions here are still
+/// metadata-only (count / mapping / mode), with real round-trip coverage
+/// living in `QVACClientTest` and `PingIntegrationTests`.
 final class CommandsAndMethodsTest: XCTestCase {
 
   // MARK: - Commands
@@ -73,7 +73,11 @@ final class CommandsAndMethodsTest: XCTestCase {
       ("suspend", .suspend),
       ("resume", .resume),
       ("state", .state),
-      ("close", nil),  // client-only — no wire command
+      // `close` is hand-written on the QVACClient actor itself (it tears
+      // the transport + RPCBridge down — client-side lifecycle, not a
+      // wire request). Tracked here with `nil` so the bounty-method
+      // surface remains explicit.
+      ("close", nil),
       ("downloadAsset", .downloadAsset),
       ("deleteCache", .deleteCache),
       ("getModelInfo", .getModelInfo),

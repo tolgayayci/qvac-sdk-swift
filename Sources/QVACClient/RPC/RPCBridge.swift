@@ -95,6 +95,15 @@ public actor RPCBridge {
 
   /// Tears the bridge down. Safe to call multiple times; further `send` /
   /// `streamResponse` invocations after `close()` fail with `.transportClosed`.
+  ///
+  /// **Pending in-flight requests** at the moment `close()` is called are
+  /// NOT directly woken by this call. bare-rpc-swift has no public hook
+  /// to fail pending continuations, and adding one via the same
+  /// `0xFFFFFFFF` injection the read loop uses on transport teardown
+  /// was observed to interact poorly with concurrent integration paths.
+  /// Callers that need to interrupt an in-flight request should cancel
+  /// the awaiting `Task` — `rpc.request` propagates `CancellationError`
+  /// down through the structured-concurrency tree.
   public func close() async {
     guard !isClosed else { return }
     isClosed = true

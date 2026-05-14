@@ -7,37 +7,29 @@ import Foundation
 
 /// Public method surface. Every entry from `@qvac/sdk`'s exported
 /// function list (`packages/sdk/index.ts:4-47`) gets a Swift-side
-/// counterpart on `QVACClient`. M1 only declares the surface — the
-/// runtime wiring (Transport setup, RPCBridge composition, JSON
-/// envelope construction with the correct `type` discriminator)
-/// lands in M2 (YK-197 QVACClient actor, YK-198 init handshake,
-/// YK-201..YK-205 per-method work).
+/// counterpart on `QVACClient`. Bodies route through the actor's
+/// internal `send` / `streamResponse` helpers (see
+/// `Sources/QVACClient/Support/QVACClient+SendStream.swift`), which
+/// in turn delegate to the `RPCBridge` set up by `connect()`.
 ///
-/// Until then, every body is a `fatalError("YK-201")` placeholder —
-/// the surface compiles, downstream consumers can wire against it,
-/// and runtime callers are guaranteed to crash loudly so we never
-/// ship a silently-broken method.
+/// Per-method richer types (replacing the `AnyCodable` placeholders
+/// where the YK-179 allowlist doesn't cover the request/response
+/// yet) land in YK-201..YK-205. The surface itself is wired and
+/// callable from M2/YK-197.
 extension QVACClient {
 
   /// Routes wire command `cancel` (reply).
   /// Request/response shape is `AnyCodable` until codegen drains
   /// the deferred set (see `docs/codegen-deferred.md`).
   public func cancel(_ request: AnyCodable = AnyCodable(.null)) async throws -> CancelResponse {
-    let _: CancelResponse = try await self.send(
+    return try await self.send(
       command: .cancel, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
-  }
-
-  /// Tears down the client. Sends `__shutdown__` to the worker
-  /// (M2 — see docs/qvac-sdk-internals.md §5) and closes the transport.
-  public func close() async throws {
-    fatalError("YK-201 wires QVACClient.close to RPCBridge")
   }
 
   /// Routes wire command `completionStream` (server-streamed response).
-  public func completion(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
-    AnyCodable, Error
-  > {
+  public nonisolated func completion(_ request: AnyCodable = AnyCodable(.null))
+    -> AsyncThrowingStream<AnyCodable, Error>
+  {
     return self.streamResponse(
       command: .completionStream, request)
   }
@@ -48,15 +40,14 @@ extension QVACClient {
   public func deleteCache(_ request: AnyCodable = AnyCodable(.null)) async throws
     -> DeleteCacheResponse
   {
-    let _: DeleteCacheResponse = try await self.send(
+    return try await self.send(
       command: .deleteCache, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `diffusionStream` (server-streamed response).
-  public func diffusion(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
-    AnyCodable, Error
-  > {
+  public nonisolated func diffusion(_ request: AnyCodable = AnyCodable(.null))
+    -> AsyncThrowingStream<AnyCodable, Error>
+  {
     return self.streamResponse(
       command: .diffusionStream, request)
   }
@@ -65,25 +56,22 @@ extension QVACClient {
   /// Request/response shape is `AnyCodable` until codegen drains
   /// the deferred set (see `docs/codegen-deferred.md`).
   public func downloadAsset(_ request: AnyCodable = AnyCodable(.null)) async throws -> AnyCodable {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .downloadAsset, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `embed` (reply).
   public func embed(_ request: EmbedRequest) async throws -> EmbedResponse {
-    let _: EmbedResponse = try await self.send(
+    return try await self.send(
       command: .embed, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `finetune` (reply).
   /// Request/response shape is `AnyCodable` until codegen drains
   /// the deferred set (see `docs/codegen-deferred.md`).
   public func finetune(_ request: AnyCodable = AnyCodable(.null)) async throws -> AnyCodable {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .finetune, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `getLoadedModelInfo` (reply).
@@ -92,40 +80,36 @@ extension QVACClient {
   public func getLoadedModelInfo(_ request: AnyCodable = AnyCodable(.null)) async throws
     -> AnyCodable
   {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .getLoadedModelInfo, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `getModelInfo` (reply).
   /// Request/response shape is `AnyCodable` until codegen drains
   /// the deferred set (see `docs/codegen-deferred.md`).
   public func getModelInfo(_ request: AnyCodable = AnyCodable(.null)) async throws -> AnyCodable {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .getModelInfo, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `heartbeat` (reply).
   public func heartbeat() async throws -> HeartbeatResponse {
-    let _: HeartbeatResponse = try await self.send(
-      command: .heartbeat, ([:] as [String: AnyCodable]))
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
+    return try await self.send(
+      command: .heartbeat, (["type": AnyCodable(.string("heartbeat"))] as [String: AnyCodable]))
   }
 
   /// Routes wire command `pluginInvoke` (reply).
   /// Request/response shape is `AnyCodable` until codegen drains
   /// the deferred set (see `docs/codegen-deferred.md`).
   public func invokePlugin(_ request: AnyCodable = AnyCodable(.null)) async throws -> AnyCodable {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .pluginInvoke, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `pluginInvokeStream` (server-streamed response).
-  public func invokePluginStream(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
-    AnyCodable, Error
-  > {
+  public nonisolated func invokePluginStream(_ request: AnyCodable = AnyCodable(.null))
+    -> AsyncThrowingStream<AnyCodable, Error>
+  {
     return self.streamResponse(
       command: .pluginInvokeStream, request)
   }
@@ -134,15 +118,14 @@ extension QVACClient {
   /// Request/response shape is `AnyCodable` until codegen drains
   /// the deferred set (see `docs/codegen-deferred.md`).
   public func loadModel(_ request: AnyCodable = AnyCodable(.null)) async throws -> AnyCodable {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .loadModel, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `loggingStream` (server-streamed response).
-  public func loggingStream(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
-    AnyCodable, Error
-  > {
+  public nonisolated func loggingStream(_ request: AnyCodable = AnyCodable(.null))
+    -> AsyncThrowingStream<AnyCodable, Error>
+  {
     return self.streamResponse(
       command: .loggingStream, request)
   }
@@ -153,9 +136,8 @@ extension QVACClient {
   public func modelRegistryGetModel(_ request: AnyCodable = AnyCodable(.null)) async throws
     -> AnyCodable
   {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .modelRegistryGetModel, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `modelRegistryList` (reply).
@@ -164,9 +146,8 @@ extension QVACClient {
   public func modelRegistryList(_ request: AnyCodable = AnyCodable(.null)) async throws
     -> AnyCodable
   {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .modelRegistryList, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `modelRegistrySearch` (reply).
@@ -175,13 +156,12 @@ extension QVACClient {
   public func modelRegistrySearch(_ request: AnyCodable = AnyCodable(.null)) async throws
     -> AnyCodable
   {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .modelRegistrySearch, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `ocrStream` (server-streamed response).
-  public func ocr(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
+  public nonisolated func ocr(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
     AnyCodable, Error
   > {
     return self.streamResponse(
@@ -192,9 +172,8 @@ extension QVACClient {
   /// Request/response shape is `AnyCodable` until codegen drains
   /// the deferred set (see `docs/codegen-deferred.md`).
   public func ragChunk(_ request: AnyCodable = AnyCodable(.null)) async throws -> AnyCodable {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .rag, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `rag` (reply).
@@ -203,9 +182,8 @@ extension QVACClient {
   public func ragCloseWorkspace(_ request: AnyCodable = AnyCodable(.null)) async throws
     -> AnyCodable
   {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .rag, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `rag` (reply).
@@ -214,9 +192,8 @@ extension QVACClient {
   public func ragDeleteEmbeddings(_ request: AnyCodable = AnyCodable(.null)) async throws
     -> AnyCodable
   {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .rag, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `rag` (reply).
@@ -225,18 +202,16 @@ extension QVACClient {
   public func ragDeleteWorkspace(_ request: AnyCodable = AnyCodable(.null)) async throws
     -> AnyCodable
   {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .rag, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `rag` (reply).
   /// Request/response shape is `AnyCodable` until codegen drains
   /// the deferred set (see `docs/codegen-deferred.md`).
   public func ragIngest(_ request: AnyCodable = AnyCodable(.null)) async throws -> AnyCodable {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .rag, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `rag` (reply).
@@ -245,18 +220,16 @@ extension QVACClient {
   public func ragListWorkspaces(_ request: AnyCodable = AnyCodable(.null)) async throws
     -> AnyCodable
   {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .rag, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `rag` (reply).
   /// Request/response shape is `AnyCodable` until codegen drains
   /// the deferred set (see `docs/codegen-deferred.md`).
   public func ragReindex(_ request: AnyCodable = AnyCodable(.null)) async throws -> AnyCodable {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .rag, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `rag` (reply).
@@ -265,59 +238,52 @@ extension QVACClient {
   public func ragSaveEmbeddings(_ request: AnyCodable = AnyCodable(.null)) async throws
     -> AnyCodable
   {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .rag, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `rag` (reply).
   /// Request/response shape is `AnyCodable` until codegen drains
   /// the deferred set (see `docs/codegen-deferred.md`).
   public func ragSearch(_ request: AnyCodable = AnyCodable(.null)) async throws -> AnyCodable {
-    let _: AnyCodable = try await self.send(
+    return try await self.send(
       command: .rag, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `resume` (reply).
   public func resume(_ request: ResumeRequest) async throws -> ResumeResponse {
-    let _: ResumeResponse = try await self.send(
+    return try await self.send(
       command: .resume, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `provide` (reply).
   public func startQVACProvider(_ request: ProvideRequest) async throws -> ProvideResponse {
-    let _: ProvideResponse = try await self.send(
+    return try await self.send(
       command: .provide, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `state` (reply).
   public func state(_ request: StateRequest) async throws -> StateResponse {
-    let _: StateResponse = try await self.send(
+    return try await self.send(
       command: .state, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `stopProvide` (reply).
   public func stopQVACProvider(_ request: StopProvideRequest) async throws -> StopProvideResponse {
-    let _: StopProvideResponse = try await self.send(
+    return try await self.send(
       command: .stopProvide, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `suspend` (reply).
   public func suspend(_ request: SuspendRequest) async throws -> SuspendResponse {
-    let _: SuspendResponse = try await self.send(
+    return try await self.send(
       command: .suspend, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `textToSpeech` (server-streamed response).
-  public func textToSpeech(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
-    AnyCodable, Error
-  > {
+  public nonisolated func textToSpeech(_ request: AnyCodable = AnyCodable(.null))
+    -> AsyncThrowingStream<AnyCodable, Error>
+  {
     return self.streamResponse(
       command: .textToSpeech, request)
   }
@@ -325,17 +291,17 @@ extension QVACClient {
   /// Routes wire command `textToSpeechStream` (duplex — request and
   /// response streams both run). Full duplex API design lands in
   /// M2 (YK-202 / YK-204); M1 surfaces a single-stream stub.
-  public func textToSpeechStream(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
-    AnyCodable, Error
-  > {
+  public nonisolated func textToSpeechStream(_ request: AnyCodable = AnyCodable(.null))
+    -> AsyncThrowingStream<AnyCodable, Error>
+  {
     return self.streamResponse(
       command: .textToSpeechStream, request)
   }
 
   /// Routes wire command `transcribe` (server-streamed response).
-  public func transcribe(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
-    AnyCodable, Error
-  > {
+  public nonisolated func transcribe(_ request: AnyCodable = AnyCodable(.null))
+    -> AsyncThrowingStream<AnyCodable, Error>
+  {
     return self.streamResponse(
       command: .transcribe, request)
   }
@@ -343,30 +309,29 @@ extension QVACClient {
   /// Routes wire command `transcribeStream` (duplex — request and
   /// response streams both run). Full duplex API design lands in
   /// M2 (YK-202 / YK-204); M1 surfaces a single-stream stub.
-  public func transcribeStream(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
-    AnyCodable, Error
-  > {
+  public nonisolated func transcribeStream(_ request: AnyCodable = AnyCodable(.null))
+    -> AsyncThrowingStream<AnyCodable, Error>
+  {
     return self.streamResponse(
       command: .transcribeStream, request)
   }
 
   /// Routes wire command `translate` (server-streamed response).
-  public func translate(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
-    AnyCodable, Error
-  > {
+  public nonisolated func translate(_ request: AnyCodable = AnyCodable(.null))
+    -> AsyncThrowingStream<AnyCodable, Error>
+  {
     return self.streamResponse(
       command: .translate, request)
   }
 
   /// Routes wire command `unloadModel` (reply).
   public func unloadModel(_ request: UnloadModelRequest) async throws -> UnloadModelResponse {
-    let _: UnloadModelResponse = try await self.send(
+    return try await self.send(
       command: .unloadModel, request)
-    fatalError("YK-201 wires QVACClient.send to RPCBridge")
   }
 
   /// Routes wire command `upscaleStream` (server-streamed response).
-  public func upscale(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
+  public nonisolated func upscale(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
     AnyCodable, Error
   > {
     return self.streamResponse(
