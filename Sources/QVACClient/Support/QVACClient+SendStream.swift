@@ -1,36 +1,35 @@
 import Foundation
 
-/// Real `send` / `streamResponse` helpers consumed by the codegen-emitted
+/// `send` / `streamResponse` helpers consumed by the codegen-emitted
 /// methods in `Sources/QVACClient/Generated/Client+Methods.swift`.
 ///
-/// Both methods route through the actor's owned `RPCBridge` (created in
-/// `QVACClient.connect()`). The QVAC worker dispatches by the JSON
-/// envelope's `type` field, not by the numeric `command` slot on
-/// bare-rpc's REQUEST frame, so the bare-rpc `command` here is a stable
-/// `1` — bare-rpc uses its own internal request-id to match reply to
-/// request and the `command` doesn't need to be unique per call.
+/// Both methods auto-wrap the caller's request in the QVAC JSON envelope
+/// — `{"type": "<command>", ...inner fields}` — before handing it to the
+/// `RPCBridge`. The worker's `handle-request.ts` dispatches on the
+/// envelope's `type` field, so any request missing it would be silently
+/// dropped; this layer makes the contract impossible to violate from
+/// generated code or hand-written callers.
 ///
-/// YK-200 (M2-CANCEL) will add a worker-side `cancel` round-trip on top
-/// of these; for now `Task.cancel()` on a `streamResponse` consumer
-/// rolls down to `IncomingStream.destroy()` via `RPCBridge`.
+/// The bare-rpc REQUEST frame `command` slot is a stable `1`. QVAC's
+/// worker ignores it for routing (it dispatches on JSON `type`);
+/// bare-rpc uses its own internal request-id for reply matching, so
+/// command-slot uniqueness isn't required per-call.
+///
+/// YK-200 (M2-CANCEL) will layer a worker-side `cancel` round-trip on
+/// top of these primitives.
 extension QVACClient {
-  /// Bare-rpc REQUEST frame `command` slot. QVAC's worker ignores this
-  /// value for routing (it dispatches on JSON `request.type`); bare-rpc
-  /// uses its own internal request-id for reply matching. Stable `1`
-  /// matches the M1 integration tests' usage and is a free choice.
+  /// bare-rpc REQUEST frame command slot — see file-doc comment above.
   fileprivate static var bareRpcCommand: UInt { 1 }
 
-  /// One-shot reply: encode `request` as JSON, send over the active
-  /// `RPCBridge`, decode the response as `Res`. The `command: QVACCommand`
-  /// argument is the wire-level `request.type` discriminator — generated
-  /// methods bind it; manual callers usually go through the per-method
-  /// generated extension instead of calling this directly.
+  /// One-shot reply: wrap `request` in the `{type, ...}` envelope, send
+  /// over the active `RPCBridge`, decode the response as `Res`.
   internal func send<Req: Encodable, Res: Decodable>(
     command: QVACCommand,
     _ request: Req
   ) async throws -> Res {
     let bridge = try requireBridge()
-    return try await bridge.send(command: Self.bareRpcCommand, request)
+    let envelope = try buildEnvelope(type: command.rawValue, request: request)
+    return try await bridge.send(command: Self.bareRpcCommand, envelope)
   }
 
   /// Server-streamed response: caller iterates the returned stream;
@@ -38,8 +37,8 @@ extension QVACClient {
   /// worker stops producing.
   ///
   /// `nonisolated` so the returned `AsyncThrowingStream` can be handed
-  /// to the caller synchronously — the actor work happens inside the
-  /// stream's continuation closure.
+  /// to the caller synchronously — the actor work (envelope build +
+  /// bridge call) happens inside the stream's continuation closure.
   internal nonisolated func streamResponse<Req: Encodable, Chunk: Decodable>(
     command: QVACCommand,
     _ request: Req
@@ -51,9 +50,8 @@ extension QVACClient {
           return
         }
         do {
-          let bridge = try await self.requireBridge()
-          let inner: AsyncThrowingStream<Chunk, Error> = bridge.streamResponse(
-            command: Self.bareRpcCommand, request)
+          let inner: AsyncThrowingStream<Chunk, Error> =
+            try await self.openStream(command: command, request: request)
           for try await chunk in inner {
             if Task.isCancelled { break }
             continuation.yield(chunk)
@@ -67,5 +65,51 @@ extension QVACClient {
         task.cancel()
       }
     }
+  }
+
+  /// Actor-isolated step for `streamResponse`: requires the bridge,
+  /// builds the envelope, opens the underlying stream. The returned
+  /// `AsyncThrowingStream` from `RPCBridge` is iterated by the caller
+  /// from the streamResponse Task (post-actor-hop).
+  private func openStream<Req: Encodable, Chunk: Decodable>(
+    command: QVACCommand,
+    request: Req
+  ) async throws -> AsyncThrowingStream<Chunk, Error> {
+    let bridge = try requireBridge()
+    let envelope = try buildEnvelope(type: command.rawValue, request: request)
+    return bridge.streamResponse(command: Self.bareRpcCommand, envelope)
+  }
+
+  /// Re-frame the user's request as a `[String: AnyCodable]` and inject
+  /// `type = <command.rawValue>`. The QVAC envelope contract:
+  ///
+  /// - **Object-shaped request** (typed DTOs, `[:]` literals): the
+  ///   envelope's other keys are the request's own fields. Any
+  ///   caller-supplied `type` is overridden — the `QVACCommand`
+  ///   argument is the source of truth for routing.
+  /// - **Null / primitive / array request**: starts from empty `[:]`,
+  ///   sets only `type`. The common case for `AnyCodable(.null)`
+  ///   defaults on methods whose request shape isn't yet in the
+  ///   codegen allowlist.
+  ///
+  /// Returns `[String: AnyCodable]` (itself `Encodable`) so the
+  /// `RPCBridge` call site doesn't need a special path — it just
+  /// hands the dict to `codec.encode` like any other request.
+  internal func buildEnvelope<Req: Encodable>(
+    type: String,
+    request: Req
+  ) throws -> [String: AnyCodable] {
+    let raw = try codec.encode(request)
+    var dict: [String: AnyCodable]
+    if let parsed = try? codec.decode([String: AnyCodable].self, from: raw) {
+      dict = parsed
+    } else {
+      // Not a JSON object — null, primitive, or array. The QVAC
+      // envelope only carries object-shaped payloads; the worker's
+      // handler validates the rest against its own schema.
+      dict = [:]
+    }
+    dict["type"] = AnyCodable(.string(type))
+    return dict
   }
 }

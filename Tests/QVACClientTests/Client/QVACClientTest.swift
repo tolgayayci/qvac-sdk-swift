@@ -70,12 +70,10 @@ final class QVACClientTest: XCTestCase {
   // MARK: - VT-3 — Streaming delivers all chunks
 
   /// Exercises `streamResponse` end-to-end: client → bridge →
-  /// AsyncThrowingStream → newline-delimited JSON decode. The peer
-  /// dispatches by the JSON envelope's `type` field, so the caller has
-  /// to provide one in the request. Generated stream methods that take
-  /// an `AnyCodable = .null` default need an explicit envelope — the
-  /// architectural fix (auto-inject `type` based on `QVACCommand`) is
-  /// scoped to YK-198/M2 and tracked in `docs/application/open-questions.md` §2.4.
+  /// AsyncThrowingStream → newline-delimited JSON decode. YK-198's
+  /// envelope auto-injection means the caller doesn't need to thread a
+  /// `type` field through the request — `client.loggingStream()` Just
+  /// Works with its default `AnyCodable(.null)` argument.
   ///
   /// Consumer-side cancel-mid-stream is intentionally NOT tested here —
   /// `bare-rpc-swift` destroy/cancel propagation to a peer mid-write is
@@ -90,10 +88,8 @@ final class QVACClientTest: XCTestCase {
     try await client.connect()
     defer { Task { await client.close() } }
 
-    let envelope = AnyCodable(
-      .object(["type": .string("loggingStream")]))
     var collected: [Int] = []
-    for try await chunk in client.loggingStream(envelope) {
+    for try await chunk in client.loggingStream() {
       if case .object(let dict) = chunk.value,
         case .int(let i) = dict["index"]
       {

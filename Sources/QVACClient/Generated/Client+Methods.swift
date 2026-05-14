@@ -95,7 +95,7 @@ extension QVACClient {
   /// Routes wire command `heartbeat` (reply).
   public func heartbeat() async throws -> HeartbeatResponse {
     return try await self.send(
-      command: .heartbeat, (["type": AnyCodable(.string("heartbeat"))] as [String: AnyCodable]))
+      command: .heartbeat, ([:] as [String: AnyCodable]))
   }
 
   /// Routes wire command `pluginInvoke` (reply).

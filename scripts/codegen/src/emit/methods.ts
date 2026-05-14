@@ -25,13 +25,16 @@ export interface EmitMethodsResult {
  */
 const QVAC_METHODS: ReadonlyArray<MethodSpec> = [
   // Lifecycle
-  // QVAC's worker dispatches on the JSON envelope's `type` field, so the
-  // payload MUST carry it. Typed-DTO methods (e.g. UnloadModelRequest)
-  // already include a `type: String` field at the type level; the
-  // heartbeat literal injects it explicitly here.
+  // QVAC's worker dispatches on the JSON envelope's `type` field, but
+  // since YK-198 the `QVACClient.send` helper auto-injects `type` from
+  // the `QVACCommand` argument; the payload can be empty. Typed-DTO
+  // methods (e.g. UnloadModelRequest) still carry a `type: String`
+  // field at the type level — that's the source-of-truth for their
+  // schema, but the envelope helper overrides it anyway with the
+  // command's rawValue.
   { name: "heartbeat", command: "heartbeat", mode: "reply",
     request: { kind: "literal", swift: "[String: AnyCodable]",
-      value: "([\"type\": AnyCodable(.string(\"heartbeat\"))] as [String: AnyCodable])" },
+      value: "([:] as [String: AnyCodable])" },
     response: { kind: "type", swift: "HeartbeatResponse" } },
   { name: "loadModel", command: "loadModel", mode: "reply",
     request: { kind: "anyCodable" }, response: { kind: "anyCodable" } },

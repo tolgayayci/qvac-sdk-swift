@@ -12,36 +12,38 @@ import Foundation
 ///
 /// **Lifecycle.** Two-step on purpose:
 ///
-/// 1. `init(transport:codec:)` — no network I/O. Just wires the actor to
-///    its dependencies. Safe to call from anywhere; produces a client in
-///    `.disconnected` state.
-/// 2. `connect()` — opens the transport, starts the `RPCBridge`. After
-///    this returns, `send` / `streamResponse` may be called.
+/// 1. `init(transport:codec:initConfig:runtimeContext:)` — no network
+///    I/O. Just wires the actor to its dependencies. Safe to call from
+///    anywhere; produces a client in `.disconnected` state.
+/// 2. `connect()` — opens the transport, starts the `RPCBridge`, runs
+///    the `__init_config` handshake. After this returns, `send` /
+///    `streamResponse` may be called.
 /// 3. `close()` — tears the bridge down and transitions to `.closed`.
 ///    Idempotent. Once closed, the client is single-use: build a new one
 ///    for a new connection. (Rationale: re-opening would have to re-run
-///    `__init_config` and any other handshake state from YK-198, which
-///    cleanly belongs to a fresh instance.)
-///
-/// `__init_config` handshake itself is owned by **YK-198** and slots into
-/// `connect()` as a post-bridge-start step.
+///    `__init_config` and any other handshake state, which cleanly
+///    belongs to a fresh instance.)
 public actor QVACClient {
   // MARK: State machine
 
-  /// The 5 lifecycle states.
+  /// The 6 lifecycle states.
   ///
   /// Transitions:
   ///
-  ///   .disconnected ──connect()──▶ .connecting ──ok──▶ .connected
+  ///   .disconnected ──connect()──▶ .connecting ──bridge.start──▶ .initializing
   ///                                              └──fail──▶ .disconnected
+  ///   .initializing ──init-ack──▶ .connected
+  ///                  └──init-fail──▶ .disconnected
   ///   .connected    ──close()────▶ .closing    ──────▶ .closed
   ///   .closed       ──connect()──▶ throws .transport(.transportClosed)
   ///
-  /// `close()` from any state is idempotent; only `.connected` triggers a
-  /// real teardown, the rest no-op into `.closed`.
+  /// `close()` from any state is idempotent; only `.connected` or
+  /// `.initializing` triggers a real teardown, the rest no-op into
+  /// `.closed`.
   public enum State: Sendable, Equatable {
     case disconnected
     case connecting
+    case initializing
     case connected
     case closing
     case closed
@@ -50,7 +52,11 @@ public actor QVACClient {
   // MARK: Dependencies
 
   private let transport: any Transport
-  private let codec: any Codec
+  /// `internal` so the `buildEnvelope` helper in
+  /// `Support/QVACClient+SendStream.swift` can re-encode the payload.
+  internal let codec: any Codec
+  private let initConfig: QVACInitConfig?
+  private let runtimeContext: QVACRuntimeContext?
 
   // MARK: Mutable state
 
@@ -61,9 +67,24 @@ public actor QVACClient {
 
   /// Builds a client wired to `transport`. No network I/O happens here —
   /// the transport remains closed until `connect()` is called.
-  public init(transport: any Transport, codec: any Codec = JSONCodec()) {
+  ///
+  /// - `initConfig`: the `QvacConfig` block sent in the
+  ///   `__init_config` handshake. Default `nil` lets the worker use
+  ///   its own defaults (`docs/qvac-sdk-internals.md` §4 / §10).
+  /// - `runtimeContext`: the per-runtime hint block. Default
+  ///   `QVACRuntimeContext()` sends `runtime: "bare"` + auto-detected
+  ///   `platform` (`darwin` / `ios` / `linux` / `win32`). Pass `nil`
+  ///   to send nothing.
+  public init(
+    transport: any Transport,
+    codec: any Codec = JSONCodec(),
+    initConfig: QVACInitConfig? = nil,
+    runtimeContext: QVACRuntimeContext? = QVACRuntimeContext()
+  ) {
     self.transport = transport
     self.codec = codec
+    self.initConfig = initConfig
+    self.runtimeContext = runtimeContext
   }
 
   /// Current lifecycle state. Surfaced for tests and for callers that want
@@ -72,14 +93,15 @@ public actor QVACClient {
 
   // MARK: Connect / close
 
-  /// Open the transport and start the underlying `RPCBridge`. Idempotent
-  /// on `.connected`. Throws on any other re-entry attempt
-  /// (`.connecting` = race, `.closing`/`.closed` = single-use).
+  /// Open the transport, start the underlying `RPCBridge`, and run the
+  /// `__init_config` handshake. Idempotent on `.connected`. Throws on
+  /// any other re-entry attempt (`.connecting`/`.initializing` = race,
+  /// `.closing`/`.closed` = single-use).
   public func connect() async throws {
     switch _state {
     case .connected:
       return
-    case .connecting:
+    case .connecting, .initializing:
       throw QVACError.transport(.framingError("QVACClient.connect() already in progress"))
     case .closing, .closed:
       throw QVACError.transport(.transportClosed)
@@ -97,12 +119,50 @@ public actor QVACClient {
       throw error
     }
     self.bridge = bridge
-    _state = .connected
 
-    // YK-198 (M2-INIT-CONFIG) will send the `__init_config` request here
-    // before declaring `.connected`. Left as a single insertion point so
-    // the handshake lands without restructuring the state machine.
+    // `__init_config` handshake (YK-198). The worker dispatches by
+    // `type === "__init_config"` and bypasses normal schema validation,
+    // so we send the literal envelope rather than routing through the
+    // `QVACCommand` enum (which deliberately doesn't include init).
+    _state = .initializing
+    do {
+      try await sendInitConfig(on: bridge)
+    } catch {
+      // Init failed — tear the bridge back down so a retry on a fresh
+      // client starts clean. Roll state back to `.disconnected` so the
+      // caller knows they can rebuild.
+      await bridge.close()
+      self.bridge = nil
+      _state = .disconnected
+      throw error
+    }
+
+    _state = .connected
   }
+
+  /// Send `{type: "__init_config", config, runtimeContext}` and decode
+  /// `{success, error?}`. Translates a `success: false` reply into a
+  /// typed `QVACError.server(.setConfigFailed, ...)`.
+  ///
+  /// Bypasses the `buildEnvelope` helper because this message IS the
+  /// envelope — the worker's dispatcher detects it pre-routing.
+  private func sendInitConfig(on bridge: RPCBridge) async throws {
+    let request = InitConfigRequest(
+      config: initConfig, runtimeContext: runtimeContext)
+    let response: InitConfigResponse = try await bridge.send(
+      command: Self.initConfigCommand, request)
+    if !response.success {
+      throw QVACError.server(
+        .setConfigFailed,
+        message: response.error ?? "worker rejected __init_config without a message")
+    }
+  }
+
+  /// bare-rpc REQUEST frame `command` slot for the init handshake.
+  /// Hardcoded `1` in the JS SDK (`packages/sdk/client/init-hooks.ts:29-55`);
+  /// match exactly so future server-side dispatch tweaks keying off
+  /// the command stay compatible.
+  private static var initConfigCommand: UInt { 1 }
 
   /// Tear the bridge down and transition to `.closed`. Safe to call from
   /// any state; only `.connected` performs a real teardown. After
@@ -115,12 +175,13 @@ public actor QVACClient {
       return
     case .closing:
       return
-    case .connecting:
-      // Connect is in flight on a different task; flip the flag so it
-      // observes the close on completion. We can't await it from inside
-      // the same actor without deadlocking, so the in-flight connect
-      // either succeeds (then sees `.closing` and drops to `.closed` on
-      // its next state check) or fails (already rolls back).
+    case .connecting, .initializing:
+      // Connect or init is in flight on a different task; flip the
+      // flag so it observes the close on completion. We can't await
+      // it from inside the same actor without deadlocking, so the
+      // in-flight connect either succeeds (then sees `.closing` and
+      // drops to `.closed` on its next state check) or fails (already
+      // rolls back).
       _state = .closing
       return
     case .connected:
@@ -137,7 +198,7 @@ public actor QVACClient {
   /// so the two send paths agree on what "not ready" looks like.
   internal func requireBridge() throws -> RPCBridge {
     switch _state {
-    case .disconnected, .connecting:
+    case .disconnected, .connecting, .initializing:
       throw QVACError.transport(
         .framingError("QVACClient.connect() not called or in progress"))
     case .closing, .closed:

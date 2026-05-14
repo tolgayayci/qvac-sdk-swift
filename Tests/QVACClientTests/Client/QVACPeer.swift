@@ -22,10 +22,22 @@ final class QVACPeer: @unchecked Sendable {
   struct Behavior: Sendable {
     var streamCount: Int = 10
     var streamIntervalMs: UInt64 = 5
+    /// When `true`, the peer replies `{success: false, error: ...}` to
+    /// `__init_config` — exercises the YK-198 failure path.
+    var failInitConfig: Bool = false
+    /// Optional error message attached when `failInitConfig` is true.
+    var initFailureMessage: String = "init config rejected by test peer"
 
-    init(streamCount: Int = 10, streamIntervalMs: UInt64 = 5) {
+    init(
+      streamCount: Int = 10,
+      streamIntervalMs: UInt64 = 5,
+      failInitConfig: Bool = false,
+      initFailureMessage: String = "init config rejected by test peer"
+    ) {
       self.streamCount = streamCount
       self.streamIntervalMs = streamIntervalMs
+      self.failInitConfig = failInitConfig
+      self.initFailureMessage = initFailureMessage
     }
   }
 
@@ -101,6 +113,19 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
     let type = decodeType(request.data) ?? ""
 
     switch type {
+    case "__init_config":
+      // YK-198 handshake. Test peer ignores the config payload itself
+      // (we don't validate worker-side config in unit tests) and
+      // replies success unless `failInitConfig` is set.
+      let body: [String: Any]
+      if behavior.failInitConfig {
+        body = ["success": false, "error": behavior.initFailureMessage]
+      } else {
+        body = ["success": true]
+      }
+      let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
+      await request.reply(data)
+
     case "heartbeat":
       let body: [String: Any] = [
         "type": "heartbeat",
