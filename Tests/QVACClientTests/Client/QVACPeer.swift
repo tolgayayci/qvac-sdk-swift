@@ -47,6 +47,12 @@ final class QVACPeer: @unchecked Sendable {
   private var delegate: PeerDelegate?
   private var readTask: Task<Void, Never>?
 
+  /// Records every cancel-runId the peer has been asked about. Used
+  /// by YK-200 tests to assert worker-side cancel propagation.
+  var cancelledRunIds: [String] {
+    get async { await delegate?.cancelledRunIds ?? [] }
+  }
+
   init(transport: any Transport, behavior: Behavior = .init()) {
     self.transport = transport
     self.behavior = behavior
@@ -80,10 +86,22 @@ final class QVACPeer: @unchecked Sendable {
   }
 }
 
+/// Note: the actor-isolated accessor on `QVACPeer` reads through to
+/// `cancelStore.value` so tests can `await peer.cancelledRunIds`.
+private actor CancelStore {
+  private(set) var value: [String] = []
+  func append(_ id: String) { value.append(id) }
+}
+
 private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
   let transport: any Transport
   let behavior: QVACPeer.Behavior
   weak var rpc: BareRPC.RPC?
+
+  private let cancelStore = CancelStore()
+  var cancelledRunIds: [String] {
+    get async { await cancelStore.value }
+  }
 
   private let outboxContinuation: AsyncStream<Data>.Continuation
   private let outboxTask: Task<Void, Never>
@@ -110,9 +128,23 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
   }
 
   func rpc(_ rpc: BareRPC.RPC, didReceiveRequest request: BareRPC.IncomingRequest) async throws {
-    let type = decodeType(request.data) ?? ""
+    let body = decodeBody(request.data)
+    let type = (body?["type"] as? String) ?? ""
 
     switch type {
+    case "cancel":
+      // YK-200 — record the runId so tests can verify cancel
+      // propagation, then reply with a CancelResponse-shaped success.
+      if let runId = body?["runId"] as? String {
+        await cancelStore.append(runId)
+      }
+      let reply: [String: Any] = [
+        "type": "cancel",
+        "success": true,
+      ]
+      let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
+      await request.reply(data)
+
     case "__init_config":
       // YK-198 handshake. Test peer ignores the config payload itself
       // (we don't validate worker-side config in unit tests) and
@@ -161,13 +193,12 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
   func rpc(_ rpc: BareRPC.RPC, didReceiveEvent event: BareRPC.IncomingEvent) async {}
   func rpc(_ rpc: BareRPC.RPC, didFailWith error: Error) {}
 
-  private func decodeType(_ data: Data?) -> String? {
+  private func decodeBody(_ data: Data?) -> [String: Any]? {
     guard let data,
-      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let type = object["type"] as? String
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     else {
       return nil
     }
-    return type
+    return object
   }
 }
