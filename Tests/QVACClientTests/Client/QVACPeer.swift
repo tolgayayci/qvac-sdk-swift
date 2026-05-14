@@ -151,6 +151,81 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
       let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
       await request.reply(data)
 
+    case "translate":
+      // YK-205. Stream partial fragments, then a final {text:...}.
+      guard let stream = await request.createResponseStream() else {
+        await request.reject("could not open stream", code: "E_STREAM", errno: -1)
+        return
+      }
+      let final: [String: Any] = ["text": "Bonjour"]
+      let data = (try? JSONSerialization.data(withJSONObject: final)) ?? Data()
+      var withNewline = data
+      withNewline.append(0x0A)
+      await stream.write(withNewline)
+      await stream.end()
+
+    case "diffusionStream":
+      // YK-205. Three progress events then a final completed image.
+      guard let stream = await request.createResponseStream() else {
+        await request.reject("could not open stream", code: "E_STREAM", errno: -1)
+        return
+      }
+      for i in 1...3 {
+        let body: [String: Any] = ["step": i, "totalSteps": 3]
+        let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
+        var withNewline = data
+        withNewline.append(0x0A)
+        await stream.write(withNewline)
+      }
+      let pngBytes = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])  // PNG magic
+      let finalBody: [String: Any] = [
+        "completed": ["image": pngBytes.base64EncodedString()]
+      ]
+      let finalData = (try? JSONSerialization.data(withJSONObject: finalBody)) ?? Data()
+      var withNewline = finalData
+      withNewline.append(0x0A)
+      await stream.write(withNewline)
+      await stream.end()
+
+    case "ocrStream":
+      // YK-205. Emit a single {text, regions} chunk and end.
+      guard let stream = await request.createResponseStream() else {
+        await request.reject("could not open stream", code: "E_STREAM", errno: -1)
+        return
+      }
+      let body: [String: Any] = [
+        "text": "QVAC ROCKS",
+        "regions": [
+          ["text": "QVAC", "bbox": [10.0, 20.0, 80.0, 30.0], "confidence": 0.98],
+          ["text": "ROCKS", "bbox": [100.0, 20.0, 90.0, 30.0], "confidence": 0.97],
+        ],
+      ]
+      let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
+      var withNewline = data
+      withNewline.append(0x0A)
+      await stream.write(withNewline)
+      await stream.end()
+
+    case "downloadAsset":
+      // YK-205. Three progress events + completed.
+      guard let stream = await request.createResponseStream() else {
+        await request.reject("could not open stream", code: "E_STREAM", errno: -1)
+        return
+      }
+      for done in [256, 512, 1024] {
+        let body: [String: Any] = ["bytesDone": done, "bytesTotal": 1024]
+        let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
+        var withNewline = data
+        withNewline.append(0x0A)
+        await stream.write(withNewline)
+      }
+      let finalBody: [String: Any] = ["localPath": "/tmp/qvac-test-asset.bin"]
+      let finalData = (try? JSONSerialization.data(withJSONObject: finalBody)) ?? Data()
+      var withNewline = finalData
+      withNewline.append(0x0A)
+      await stream.write(withNewline)
+      await stream.end()
+
     case "transcribe":
       // YK-204. Open response stream and emit a couple of partial
       // transcripts then a terminal final.
