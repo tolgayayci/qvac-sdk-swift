@@ -6,6 +6,7 @@ import { emitCommands } from "./emit/commands.js";
 import { emitErrorCodes, loadErrorCodesFromPackage } from "./emit/errors.js";
 import { emitMethods } from "./emit/methods.js";
 import { emitTypes } from "./emit/types.js";
+import { formatGenerated } from "./format.js";
 import { listEntryExports, parseSdk, type ParsedSdk } from "./parse.js";
 
 /**
@@ -187,6 +188,24 @@ export async function main(argv: readonly string[]): Promise<number> {
   } catch (err) {
     process.stderr.write(
       `error: emitCommands/emitMethods failed: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return 1;
+  }
+
+  // YK-182 — optional swift-format pass. Only runs if the binary is on
+  // PATH (or reachable via `xcrun -f swift-format`); otherwise the hand-
+  // written output is already canonical (sorted, `\n` line endings, no
+  // timestamps) and re-running the harness is byte-identical without it.
+  try {
+    const format = formatGenerated(options.outDir);
+    if (format.ran) {
+      process.stdout.write(`  swift-format       ran on ${format.files ?? 0} file(s)\n`);
+    } else {
+      process.stdout.write(`  swift-format       skipped — ${format.reason}\n`);
+    }
+  } catch (err) {
+    process.stderr.write(
+      `error: swift-format failed: ${err instanceof Error ? err.message : String(err)}\n`,
     );
     return 1;
   }

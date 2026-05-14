@@ -3,6 +3,7 @@
 // Re-generate with: pnpm --filter @qvac-swift/codegen run run
 
 import Foundation
+
 public struct SuspendRequest: Codable, Sendable, Equatable {
   public let `type`: String
 

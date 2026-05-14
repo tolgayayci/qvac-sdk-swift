@@ -94,4 +94,3 @@ public enum QVACCommand: String, Sendable, Equatable, CaseIterable {
     }
   }
 }
-

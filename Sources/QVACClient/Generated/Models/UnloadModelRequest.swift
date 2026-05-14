@@ -3,6 +3,7 @@
 // Re-generate with: pnpm --filter @qvac-swift/codegen run run
 
 import Foundation
+
 public struct UnloadModelRequest: Codable, Sendable, Equatable {
   public let modelId: String
   public let clearStorage: Bool

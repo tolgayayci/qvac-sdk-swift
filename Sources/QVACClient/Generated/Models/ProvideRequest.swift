@@ -3,6 +3,7 @@
 // Re-generate with: pnpm --filter @qvac-swift/codegen run run
 
 import Foundation
+
 public struct ProvideRequest: Codable, Sendable, Equatable {
   public let `type`: String
   public let firewall: AnyCodable?

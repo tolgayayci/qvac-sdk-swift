@@ -3,6 +3,7 @@
 // Re-generate with: pnpm --filter @qvac-swift/codegen run run
 
 import Foundation
+
 public enum ProfilerMode: String, Codable, Sendable, Equatable, CaseIterable {
   case summary
   case verbose

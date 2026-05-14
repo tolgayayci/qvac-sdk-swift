@@ -180,3 +180,12 @@ jobs:
             exit 1
           fi
           echo "Generated/ in sync with codegen output. ✓"
+
+      # YK-182 — second-gate idempotency check independent of git state.
+      # Runs the harness twice into separate tmp dirs and diffs the
+      # outputs. Catches non-determinism that the previous diff-against-
+      # committed step would miss (e.g. if someone re-committed an
+      # already-drifted state, leaving git clean but the codegen still
+      # producing two different outputs run-to-run).
+      - name: Idempotency check (two runs into tmp dirs)
+        run: ./test-idempotency.sh

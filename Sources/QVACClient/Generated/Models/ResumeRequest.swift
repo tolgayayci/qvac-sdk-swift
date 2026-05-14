@@ -3,6 +3,7 @@
 // Re-generate with: pnpm --filter @qvac-swift/codegen run run
 
 import Foundation
+
 public struct ResumeRequest: Codable, Sendable, Equatable {
   public let `type`: String
 

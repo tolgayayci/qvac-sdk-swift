@@ -3,6 +3,7 @@
 // Re-generate with: pnpm --filter @qvac-swift/codegen run run
 
 import Foundation
+
 public struct FirewallConfig: Codable, Sendable, Equatable {
   public let mode: String
   public let publicKeys: [String]

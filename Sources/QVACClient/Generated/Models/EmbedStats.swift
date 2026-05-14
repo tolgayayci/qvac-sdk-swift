@@ -3,6 +3,7 @@
 // Re-generate with: pnpm --filter @qvac-swift/codegen run run
 
 import Foundation
+
 public struct EmbedStats: Codable, Sendable, Equatable {
   public let totalTime: Double?
   public let tokensPerSecond: Double?
