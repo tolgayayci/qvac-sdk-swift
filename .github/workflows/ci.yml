@@ -50,8 +50,9 @@ jobs:
         run: pnpm test
 
       - name: Smoke-run codegen (no diff check)
-        # YK-194 owns the strict drift-check job. This step just proves
-        # the harness runs end-to-end against the real @qvac/sdk.
+        # The strict drift check lives in the `codegen-drift` job below;
+        # this one just proves the harness runs end-to-end against the
+        # real @qvac/sdk on Linux as well as macOS.
         run: pnpm run run
 
   swift-macos:
@@ -137,3 +138,45 @@ jobs:
           path: coverage.lcov
           if-no-files-found: ignore
           retention-days: 7
+
+  codegen-drift:
+    name: codegen drift (no diff vs committed Generated/)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: scripts/codegen
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.2
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: pnpm
+          cache-dependency-path: scripts/codegen/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Re-run codegen
+        run: pnpm run run
+
+      - name: Verify no drift in Sources/QVACClient/Generated
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          if ! git diff --exit-code -- Sources/QVACClient/Generated/; then
+            echo "::error::Codegen drift detected. Run 'pnpm -C scripts/codegen run run' locally and commit the updated files. See docs/codegen.md for recovery."
+            echo ""
+            echo "::group::Diff"
+            git diff -- Sources/QVACClient/Generated/ | head -400
+            echo "::endgroup::"
+            exit 1
+          fi
+          echo "Generated/ in sync with codegen output. ✓"
