@@ -151,6 +151,50 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
       let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
       await request.reply(data)
 
+    case "transcribe":
+      // YK-204. Open response stream and emit a couple of partial
+      // transcripts then a terminal final.
+      guard let stream = await request.createResponseStream() else {
+        await request.reject("could not open stream", code: "E_STREAM", errno: -1)
+        return
+      }
+      let partials = ["hello", "hello world"]
+      for p in partials {
+        let body: [String: Any] = ["partial": p]
+        let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
+        var withNewline = data
+        withNewline.append(0x0A)
+        await stream.write(withNewline)
+      }
+      let finalBody: [String: Any] = [
+        "final": ["text": "hello world", "segments": []]
+      ]
+      let finalData = (try? JSONSerialization.data(withJSONObject: finalBody)) ?? Data()
+      var withNewline = finalData
+      withNewline.append(0x0A)
+      await stream.write(withNewline)
+      await stream.end()
+
+    case "textToSpeech":
+      // YK-204. Emit 3 audio chunks (stub PCM bytes).
+      guard let stream = await request.createResponseStream() else {
+        await request.reject("could not open stream", code: "E_STREAM", errno: -1)
+        return
+      }
+      let chunks = [
+        Data([0x01, 0x02, 0x03, 0x04]),
+        Data([0x05, 0x06, 0x07, 0x08]),
+        Data([0x09, 0x0A, 0x0B, 0x0C]),
+      ]
+      for chunk in chunks {
+        let body: [String: Any] = ["audio": chunk.base64EncodedString()]
+        let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
+        var withNewline = data
+        withNewline.append(0x0A)
+        await stream.write(withNewline)
+      }
+      await stream.end()
+
     case "embed":
       // YK-203. Reply with `{type:"embed", success: true, embedding: [[...],
       // [...]]}`. The stub vector is just `[Double(i)]` per input — enough
