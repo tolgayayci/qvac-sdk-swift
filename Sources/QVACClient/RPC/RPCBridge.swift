@@ -276,19 +276,41 @@ private struct WireErrorFrame: Decodable {
 }
 
 /// Bridges `BareRPC.RPCDelegate` (sync send callback) onto an async `Transport`.
+///
 /// Send failures from the transport are dropped here — the RPC actor will
 /// observe them as pending-continuation failures on next read.
+///
+/// The naive implementation (`Task { try? await transport.send(data) }`)
+/// spawns a new Task per call. Tasks aren't FIFO-ordered relative to their
+/// spawn site, so two writes initiated back-to-back from the actor can
+/// reach the transport out of order — which in practice manifests as a
+/// stream's final DATA frame arriving *after* its END frame, dropping the
+/// last chunk. Fix: queue outgoing bytes onto an `AsyncStream` drained by
+/// a single dedicated Task so order is guaranteed.
 private final class TransportDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
   let transport: any Transport
 
+  private let outboxContinuation: AsyncStream<Data>.Continuation
+  private let outboxTask: Task<Void, Never>
+
   init(transport: any Transport) {
     self.transport = transport
+    let (stream, continuation) = AsyncStream<Data>.makeStream(bufferingPolicy: .unbounded)
+    self.outboxContinuation = continuation
+    self.outboxTask = Task { [transport] in
+      for await data in stream {
+        try? await transport.send(data)
+      }
+    }
+  }
+
+  deinit {
+    outboxContinuation.finish()
+    outboxTask.cancel()
   }
 
   func rpc(_ rpc: BareRPC.RPC, send data: Data) {
-    Task { [transport] in
-      try? await transport.send(data)
-    }
+    outboxContinuation.yield(data)
   }
 
   func rpc(

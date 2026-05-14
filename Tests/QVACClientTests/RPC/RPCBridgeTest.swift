@@ -226,14 +226,30 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
   private let encoder = JSONEncoder()
   private let decoder = JSONDecoder()
 
+  // See RPCBridge.TransportDelegate for why a serial outbox is needed:
+  // `Task { await transport.send(...) }` doesn't preserve spawn order, so
+  // a stream's END frame can race ahead of its last DATA frame.
+  private let outboxContinuation: AsyncStream<Data>.Continuation
+  private let outboxTask: Task<Void, Never>
+
   init(transport: any Transport) {
     self.transport = transport
+    let (stream, continuation) = AsyncStream<Data>.makeStream(bufferingPolicy: .unbounded)
+    self.outboxContinuation = continuation
+    self.outboxTask = Task { [transport] in
+      for await data in stream {
+        try? await transport.send(data)
+      }
+    }
+  }
+
+  deinit {
+    outboxContinuation.finish()
+    outboxTask.cancel()
   }
 
   func rpc(_ rpc: BareRPC.RPC, send data: Data) {
-    Task { [transport] in
-      try? await transport.send(data)
-    }
+    outboxContinuation.yield(data)
   }
 
   func rpc(

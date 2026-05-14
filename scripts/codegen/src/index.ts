@@ -2,7 +2,9 @@
 import ts from "typescript";
 
 import { parseCliOptions, usage } from "./cli.js";
+import { emitCommands } from "./emit/commands.js";
 import { emitErrorCodes, loadErrorCodesFromPackage } from "./emit/errors.js";
+import { emitMethods } from "./emit/methods.js";
 import { emitTypes } from "./emit/types.js";
 import { listEntryExports, parseSdk, type ParsedSdk } from "./parse.js";
 
@@ -175,9 +177,21 @@ export async function main(argv: readonly string[]): Promise<number> {
     return 1;
   }
 
-  process.stdout.write(`✓ Codegen complete → ${options.outDir}\n`);
+  // YK-180 — emit Commands.swift + Client+Methods.swift.
+  try {
+    const source = `${parsed.packageName}@${parsed.packageVersion}`;
+    const commands = emitCommands({ source }, options.outDir);
+    const methods = emitMethods({ source }, options.outDir);
+    process.stdout.write(`  Commands.swift    ${commands.count} request types\n`);
+    process.stdout.write(`  Client+Methods    ${methods.count} method stubs\n`);
+  } catch (err) {
+    process.stderr.write(
+      `error: emitCommands/emitMethods failed: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return 1;
+  }
 
-  // YK-180 will plug its emit pass in here.
+  process.stdout.write(`✓ Codegen complete → ${options.outDir}\n`);
   return 0;
 }
 
