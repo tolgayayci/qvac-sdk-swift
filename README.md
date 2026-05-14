@@ -1,5 +1,9 @@
 # QVACClient — native Swift client for Tether's QVAC SDK
 
+<!-- The badge URL resolves once the repo is pushed under its final org/name.
+     Placeholder for now; tracked by YK-227 (proposal) / YK-229 (submit). -->
+[![ci](https://github.com/qvac-swift/QVACClient/actions/workflows/ci.yml/badge.svg)](https://github.com/qvac-swift/QVACClient/actions/workflows/ci.yml)
+
 A Swift Package Manager library that gives macOS and iOS apps first-class, type-safe access
 to the [QVAC SDK](https://github.com/tetherto/qvac)'s on-device AI capabilities — text
 completion, embeddings, transcription, translation, text-to-speech, OCR, diffusion, RAG,

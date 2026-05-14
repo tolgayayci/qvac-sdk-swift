@@ -1,0 +1,139 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel in-progress runs on the same ref so quick-fire pushes don't burn
+# duplicate CI minutes. Default GitHub semantics: PR pushes share a group
+# per PR; main pushes get their own group.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codegen-ts:
+    name: codegen (TS + vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: scripts/codegen
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.2
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: pnpm
+          cache-dependency-path: scripts/codegen/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: tsc strict build
+        run: pnpm run build
+
+      - name: vitest
+        run: pnpm test
+
+      - name: Smoke-run codegen (no diff check)
+        # YK-194 owns the strict drift-check job. This step just proves
+        # the harness runs end-to-end against the real @qvac/sdk.
+        run: pnpm run run
+
+  swift-macos:
+    name: swift build + test (macOS 14 ARM64)
+    runs-on: macos-14
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.0.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.0.app
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Cache SwiftPM build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/org.swift.swiftpm
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      # Bare worker fixture runs under Node — install before swift test
+      # so PingIntegrationTests / PingServerHarnessTest can spawn it.
+      - name: Set up Node.js (for Bare ping fixture)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+
+      - name: Install Bare fixture deps
+        working-directory: Tests/Fixtures/ping-server
+        run: npm ci
+
+      - name: Resolve SPM dependencies
+        run: swift package resolve
+
+      - name: Swift build
+        run: swift build -v
+
+      - name: Swift test (with coverage)
+        run: swift test --enable-code-coverage --parallel
+
+      - name: Export LCOV coverage
+        if: always()
+        run: |
+          set -euo pipefail
+          # Locate the .xctest bundle SwiftPM produced and the profdata
+          # file the test run wrote next to it. Layout is stable across
+          # `swift test --enable-code-coverage` runs on Apple Silicon.
+          BUILD_DIR=$(swift build --show-bin-path 2>/dev/null)
+          XCTEST_BUNDLE=$(find "$BUILD_DIR" -name '*.xctest' -type d | head -n 1)
+          PROFDATA=$(find "$BUILD_DIR"/codecov -name '*.profdata' | head -n 1)
+          if [[ -z "$XCTEST_BUNDLE" || -z "$PROFDATA" ]]; then
+            echo "No coverage data found at $BUILD_DIR — skipping LCOV export."
+            exit 0
+          fi
+          # The binary inside the bundle has a Contents/MacOS/<Name> on
+          # macOS bundle layout; on SwiftPM-flat bundles it sits at the
+          # bundle root. Try both.
+          BIN_NAME=$(basename "$XCTEST_BUNDLE" .xctest)
+          BIN_PATH="$XCTEST_BUNDLE/Contents/MacOS/$BIN_NAME"
+          if [[ ! -f "$BIN_PATH" ]]; then
+            BIN_PATH="$XCTEST_BUNDLE/$BIN_NAME"
+          fi
+          xcrun llvm-cov export \
+            -format=lcov \
+            -instr-profile "$PROFDATA" \
+            "$BIN_PATH" \
+            > coverage.lcov
+          echo "Generated coverage.lcov ($(wc -l < coverage.lcov) lines)."
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: coverage.lcov
+          if-no-files-found: ignore
+          retention-days: 7
