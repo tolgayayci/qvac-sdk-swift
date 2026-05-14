@@ -21,18 +21,20 @@ import Foundation
 ///   across `bare-rpc` `STREAM|DATA` frames and splits on `\n` before decoding.
 public actor RPCBridge {
   private let transport: any Transport
-  private let decoder: JSONDecoder
-  private let encoder: JSONEncoder
+  private let codec: any Codec
   private var rpc: BareRPC.RPC?
   private var delegate: TransportDelegate?
   private var readTask: Task<Void, Never>?
   private(set) var isStarted = false
   private(set) var isClosed = false
 
-  public init(transport: any Transport) {
+  /// `codec` defaults to `JSONCodec()` — the production QVAC wire format.
+  /// Tests swap in alternative codecs (e.g. a logging one) by passing them
+  /// here; the rest of the actor never touches `JSONEncoder` /
+  /// `JSONDecoder` directly.
+  public init(transport: any Transport, codec: any Codec = JSONCodec()) {
     self.transport = transport
-    self.encoder = JSONEncoder()
-    self.decoder = JSONDecoder()
+    self.codec = codec
   }
 
   /// Opens the transport, constructs the `BareRPC.RPC` actor, and starts the
@@ -112,7 +114,7 @@ public actor RPCBridge {
     _ req: Req
   ) async throws -> Res {
     let rpc = try requireOpen()
-    let payload = try encoder.encode(req)
+    let payload = try codec.encode(req)
     let raw: Data?
     do {
       // Pass the caller-supplied `command` straight through to bare-rpc.
@@ -167,7 +169,7 @@ public actor RPCBridge {
     continuation: AsyncThrowingStream<Chunk, Error>.Continuation
   ) async throws {
     let rpc = try requireOpen()
-    let payload = try encoder.encode(req)
+    let payload = try codec.encode(req)
 
     let stream: BareRPC.IncomingStream
     do {
@@ -201,7 +203,7 @@ public actor RPCBridge {
           let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
           guard !trimmed.isEmpty, let lineData = trimmed.data(using: .utf8) else { continue }
           do {
-            let decoded = try decoder.decode(Chunk.self, from: lineData)
+            let decoded = try codec.decode(Chunk.self, from: lineData)
             continuation.yield(decoded)
           } catch {
             let q = QVACError.transport(.decodingFailed(String(describing: error)))
@@ -221,7 +223,7 @@ public actor RPCBridge {
 
     let leftover = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
     if !leftover.isEmpty, let lineData = leftover.data(using: .utf8) {
-      if let final = try? decoder.decode(Chunk.self, from: lineData) {
+      if let final = try? codec.decode(Chunk.self, from: lineData) {
         continuation.yield(final)
       }
     }
@@ -239,7 +241,7 @@ public actor RPCBridge {
   }
 
   private func decodeResponseOrThrow<R: Decodable>(_ data: Data, as type: R.Type) throws -> R {
-    if let errorFrame = try? decoder.decode(WireErrorFrame.self, from: data),
+    if let errorFrame = try? codec.decode(WireErrorFrame.self, from: data),
       errorFrame.type == "error"
     {
       throw QVACError(
@@ -248,7 +250,7 @@ public actor RPCBridge {
         message: errorFrame.message)
     }
     do {
-      return try decoder.decode(R.self, from: data)
+      return try codec.decode(R.self, from: data)
     } catch {
       throw QVACError.transport(.decodingFailed(String(describing: error)))
     }
