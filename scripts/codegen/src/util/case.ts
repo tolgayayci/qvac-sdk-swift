@@ -13,6 +13,13 @@
  */
 export function snakeToLowerCamel(input: string): string {
   if (input.length === 0) return input;
+  // If the input contains no underscores, treat it as already-camelCase
+  // (or PascalCase) and only lowercase the first character. This handles
+  // discriminated-union case names like "deleteCacheAll" that should
+  // preserve their internal capitalization.
+  if (!input.includes("_")) {
+    return input.charAt(0).toLowerCase() + input.slice(1);
+  }
   const parts = input.toLowerCase().split("_").filter((p) => p.length > 0);
   if (parts.length === 0) return input;
   return parts

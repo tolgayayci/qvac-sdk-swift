@@ -86,7 +86,16 @@ export function parseSdk(packageJsonPath: string): ParsedSdk {
     esModuleInterop: true,
   };
 
-  const program = ts.createProgram([entryDts], compilerOptions);
+  // Pass every .d.ts under the SDK's dist as a root file. Loading just the
+  // entry doesn't pull in transitive `.d.ts` (the compiler's symbol resolver
+  // follows imports but it doesn't add resolved sources to the program's
+  // root list, so `program.getSourceFiles()` only returns files we name
+  // explicitly). YK-179's codegen needs to walk every `interface` /
+  // `type alias` declared in the SDK, so we widen the roots here.
+  const distDir = path.dirname(entryDts);
+  const dtsRoots = listDtsFilesRecursively(distDir);
+
+  const program = ts.createProgram(dtsRoots, compilerOptions);
   const checker = program.getTypeChecker();
 
   return {
@@ -97,6 +106,30 @@ export function parseSdk(packageJsonPath: string): ParsedSdk {
     program,
     checker,
   };
+}
+
+/** Recursively list all `.d.ts` files under `dir`. */
+function listDtsFilesRecursively(dir: string): string[] {
+  const out: string[] = [];
+  const stack: string[] = [dir];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+      } else if (entry.isFile() && full.endsWith(".d.ts") && !full.endsWith(".d.ts.map")) {
+        out.push(full);
+      }
+    }
+  }
+  return out.sort();
 }
 
 /**
