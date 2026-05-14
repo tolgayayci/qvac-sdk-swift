@@ -56,6 +56,24 @@ token.cancel()
 The token is `Sendable` and idempotent — calling `cancel()` twice is
 a no-op.
 
+## Post-YK-209 revision
+
+**The original YK-200 design auto-injected a per-call `runId` into every envelope and fired `{type:"cancel", runId:...}` on Task.cancel.** YK-209 (real-worker integration) showed `@qvac/sdk`'s strict Zod schemas reject ANY unknown envelope field — every typed handler refused `runId`. The injection was removed in `QVACClient+SendStream.swift`.
+
+QVAC's actual cancel API (per `@qvac/sdk/dist/schemas/cancel.js`):
+
+```js
+{type: "cancel", operation: "inference"|"downloadAsset"|"rag",
+  modelId|downloadKey|workspace: "..."}
+```
+
+Keyed by the **resource being cancelled**, not by a per-call runId. Proper cancellation requires per-method context (caller knows the modelId for inference, the downloadKey for downloads) that the envelope helper doesn't have. The right surface is a typed `client.cancel(operation:modelId:)` API — tracked as M3 follow-on YK-200v2.
+
+Today's behavior:
+- ✅ `Task.cancel()` on a Swift consumer of an AsyncThrowingStream cleanly breaks iteration
+- ✅ `CancellationToken` wraps `Task.cancel()` for non-Task callers
+- ❌ No worker-side cancel emission — the worker keeps producing until natural end. Bandwidth/CPU cost is the cost.
+
 ## Caveat — upstream limitation
 
 `bare-rpc-swift`'s `rpc.request` does **not** observe Swift's Task

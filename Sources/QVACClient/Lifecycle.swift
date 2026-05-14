@@ -72,9 +72,24 @@ extension QVACClient {
     modelType: String,
     extras: [String: AnyCodable] = [:]
   ) async throws -> ModelId {
+    // The @qvac/sdk server-side schema (per
+    // `@qvac/sdk/dist/schemas/load-model.js`) requires:
+    // - `type: "loadModel"` (auto-injected by buildEnvelope)
+    // - `modelSrc: string`
+    // - `modelType: <canonical>` (e.g. "llamacpp-embedding", not
+    //    the "embeddings" alias — alias resolution happens client-
+    //    side in the JS SDK before send)
+    // - `modelConfig: {...}` (required key; empty object OK since
+    //    every sub-field has a default)
+    // - `delegate: undefined` works in practice (the JS client
+    //    transform leaves it `undefined`; the worker's
+    //    `applyDeviceDefaultsToRequest` doesn't touch it, and Zod's
+    //    parse accepts missing optional-default keys when the
+    //    schema's `delegateSchema` has all-default fields).
     var body: [String: AnyCodable] = [
       "modelSrc": AnyCodable(.string(modelSrc)),
-      "modelType": AnyCodable(.string(modelType)),
+      "modelType": AnyCodable(.string(Self.canonicalizeModelType(modelType))),
+      "modelConfig": AnyCodable(.object([:])),
     ]
     for (key, value) in extras { body[key] = value }
 
@@ -87,5 +102,23 @@ extension QVACClient {
         .decodingFailed("loadModel response missing `modelId` field: \(response.value)"))
     }
     return id
+  }
+
+  /// Resolve a `modelType` argument to the canonical name @qvac/sdk's
+  /// strict schemas expect. Mirrors the alias table in
+  /// `@qvac/sdk/dist/schemas/model-types.js`'s `ModelTypeAliases`.
+  /// Pass-through for already-canonical names + unknown strings.
+  private static func canonicalizeModelType(_ input: String) -> String {
+    switch input {
+    case "llm": return "llamacpp-completion"
+    case "whisper": return "whispercpp-transcription"
+    case "embeddings": return "llamacpp-embedding"
+    case "nmt": return "nmtcpp-translation"
+    case "parakeet": return "parakeet-transcription"
+    case "tts": return "onnx-tts"
+    case "ocr": return "onnx-ocr"
+    case "diffusion": return "sdcpp-generation"
+    default: return input
+    }
   }
 }

@@ -57,7 +57,13 @@ final class CompletionTest: XCTestCase {
   /// Cancellation during stream emits a worker `cancel` (covered by
   /// `CancellationTest`; this verifies it works through the
   /// `completion` wrapper specifically, not just `loggingStream`).
-  func testStreamingCancellationEmitsCancelCommand() async throws {
+  /// Revision note (post-YK-209): the original test asserted the
+  /// `runId`-keyed cancel emission, but YK-209 showed @qvac/sdk's
+  /// strict schemas reject `runId` in the envelope. The cancel
+  /// path is now caller-driven (`client.cancel(operation:modelId:)`
+  /// will be M3-YK-200v2). This test just verifies consumer break
+  /// cleanly stops iteration.
+  func testStreamingConsumerBreakStopsIteration() async throws {
     let (client, peer) = try await makePair(
       behavior: .init(streamCount: 1000, streamIntervalMs: 1))
     defer { Task { await peer.close() } }
@@ -73,10 +79,7 @@ final class CompletionTest: XCTestCase {
         if collected >= 3 { break }
       }
     }
-
-    try await Task.sleep(nanoseconds: 100_000_000)
-    let cancelled = await peer.cancelledRunIds
-    XCTAssertGreaterThanOrEqual(cancelled.count, 1, "cancel should reach peer")
+    XCTAssertEqual(collected, 3)
   }
 
   // MARK: - Blocking

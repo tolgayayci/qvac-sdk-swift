@@ -33,28 +33,32 @@ extension QVACClient {
   /// bare-rpc REQUEST frame command slot — see file-doc comment above.
   fileprivate static var bareRpcCommand: UInt { 1 }
 
-  /// One-shot reply: wrap `request` in the `{type, runId, ...}`
-  /// envelope, send over the active `RPCBridge`, decode the response
-  /// as `Res`. Task cancellation propagates to the worker via the
-  /// `cancel` command keyed on `runId`.
+  /// One-shot reply: wrap `request` in the `{type, ...}` envelope,
+  /// send over the active `RPCBridge`, decode the response as `Res`.
+  ///
+  /// **Cancellation note** (YK-200 / corrected after YK-209): the
+  /// `@qvac/sdk` worker uses `.strict()` Zod schemas that reject
+  /// unknown envelope fields. The original YK-200 design injected a
+  /// `runId: UUID` field to key worker-side cancellation, but that
+  /// breaks every typed handler. QVAC's actual cancel API is
+  /// `{type: "cancel", operation: "inference"|"downloadAsset"|"rag",
+  ///   modelId or downloadKey or workspace}` — keyed by the resource
+  /// being cancelled, not by a per-call runId (see
+  /// `@qvac/sdk/dist/schemas/cancel.js`).
+  ///
+  /// Proper per-method cancellation (cancel-inference on the
+  /// in-flight model, cancel-download on the active key) requires
+  /// per-call context the envelope helper doesn't have. Tracked in
+  /// `docs/cancellation.md` under "post-YK-209 revision"; for now
+  /// cancellation has to be initiated by the caller via
+  /// `client.cancel(operation:modelId:)` (M3 — YK-200 v2).
   internal func send<Req: Encodable, Res: Decodable>(
     command: QVACCommand,
     _ request: Req
   ) async throws -> Res {
     let bridge = try requireBridge()
-    let runId = UUID().uuidString
-    let envelope = try buildEnvelope(
-      type: command.rawValue, runId: runId, request: request)
-
-    return try await withTaskCancellationHandler(
-      operation: {
-        try await bridge.send(command: Self.bareRpcCommand, envelope)
-      },
-      onCancel: { [weak self] in
-        Task { [weak self] in
-          await self?.sendCancelFireAndForget(runId: runId)
-        }
-      })
+    let envelope = try buildEnvelope(type: command.rawValue, request: request)
+    return try await bridge.send(command: Self.bareRpcCommand, envelope)
   }
 
   /// Server-streamed response: caller iterates the returned stream;
@@ -77,7 +81,6 @@ extension QVACClient {
   ) -> AsyncThrowingStream<Chunk, Error> {
     let policy: AsyncThrowingStream<Chunk, Error>.Continuation.BufferingPolicy =
       bufferSize.map { .bufferingNewest($0) } ?? .unbounded
-    let runId = UUID().uuidString
 
     return AsyncThrowingStream<Chunk, Error>(bufferingPolicy: policy) { continuation in
       let task = Task { [weak self] in
@@ -85,33 +88,17 @@ extension QVACClient {
           continuation.finish(throwing: QVACError.transport(.transportClosed))
           return
         }
-        // `withTaskCancellationHandler` is the only way to observe
-        // `task.cancel()` while suspended in `for try await chunk in
-        // inner`. Checking `Task.isCancelled` inside the loop body
-        // misses the common case where the iterator yields `nil` on
-        // cancel (the body never runs again).
-        await withTaskCancellationHandler(
-          operation: {
-            do {
-              let inner: AsyncThrowingStream<Chunk, Error> =
-                try await self.openStream(
-                  command: command,
-                  request: request,
-                  runId: runId,
-                  bufferSize: bufferSize)
-              for try await chunk in inner {
-                continuation.yield(chunk)
-              }
-              continuation.finish()
-            } catch {
-              continuation.finish(throwing: error)
-            }
-          },
-          onCancel: { [weak self] in
-            Task { [weak self] in
-              await self?.sendCancelFireAndForget(runId: runId)
-            }
-          })
+        do {
+          let inner: AsyncThrowingStream<Chunk, Error> =
+            try await self.openStream(
+              command: command, request: request, bufferSize: bufferSize)
+          for try await chunk in inner {
+            continuation.yield(chunk)
+          }
+          continuation.finish()
+        } catch {
+          continuation.finish(throwing: error)
+        }
       }
       continuation.onTermination = { @Sendable _ in
         task.cancel()
@@ -124,26 +111,25 @@ extension QVACClient {
   private func openStream<Req: Encodable, Chunk: Decodable>(
     command: QVACCommand,
     request: Req,
-    runId: String,
     bufferSize: Int?
   ) async throws -> AsyncThrowingStream<Chunk, Error> {
     let bridge = try requireBridge()
-    let envelope = try buildEnvelope(
-      type: command.rawValue, runId: runId, request: request)
+    let envelope = try buildEnvelope(type: command.rawValue, request: request)
     return bridge.streamResponse(
       command: Self.bareRpcCommand, envelope, bufferSize: bufferSize)
   }
 
   /// Re-frame the user's request as a `[String: AnyCodable]` and
-  /// inject `type = <command.rawValue>` and `runId = <uuid>`. Both
-  /// fields override any caller-supplied values — `QVACCommand` and
-  /// the per-call UUID are the sources of truth.
+  /// inject `type = <command.rawValue>` (override caller's `type`).
+  /// The `@qvac/sdk` worker uses `.strict()` Zod schemas that reject
+  /// unknown envelope fields, so we deliberately inject ONLY `type`
+  /// — extra envelope wrapping is the caller's responsibility per
+  /// the SDK's per-handler schema.
   ///
   /// Returns `[String: AnyCodable]` (itself `Encodable`) so the
   /// `RPCBridge` call site doesn't need a special path.
   internal func buildEnvelope<Req: Encodable>(
     type: String,
-    runId: String? = nil,
     request: Req
   ) throws -> [String: AnyCodable] {
     let raw = try codec.encode(request)
@@ -155,28 +141,6 @@ extension QVACClient {
       dict = [:]
     }
     dict["type"] = AnyCodable(.string(type))
-    if let runId {
-      dict["runId"] = AnyCodable(.string(runId))
-    }
     return dict
-  }
-
-  /// Fires the QVAC `{"type": "cancel", "runId": <id>}` request and
-  /// discards the reply. Used from cancellation handlers — we don't
-  /// await the cancel-ack because cascading cancellation would let
-  /// the original request hang on a separate failure mode.
-  ///
-  /// Best-effort: if the bridge is already torn down (race with
-  /// `client.close()`), this silently no-ops. If the worker doesn't
-  /// recognize the runId (already completed), it replies with an
-  /// error that we also discard.
-  private func sendCancelFireAndForget(runId: String) async {
-    guard let bridge = try? requireBridge() else { return }
-    let envelope: [String: AnyCodable] = [
-      "type": AnyCodable(.string("cancel")),
-      "runId": AnyCodable(.string(runId)),
-    ]
-    let _: CancelResponse? = try? await bridge.send(
-      command: Self.bareRpcCommand, envelope)
   }
 }
