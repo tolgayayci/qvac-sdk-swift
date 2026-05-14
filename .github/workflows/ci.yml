@@ -102,6 +102,9 @@ jobs:
       - name: Swift build
         run: swift build -v
 
+      - name: Download BareKit.xcframework
+        run: ./scripts/download-barekit.sh
+
       - name: Swift test (with coverage)
         run: swift test --enable-code-coverage --parallel
 
@@ -142,6 +145,110 @@ jobs:
           path: coverage.lcov
           if-no-files-found: ignore
           retention-days: 7
+
+  swift-ios:
+    # YK-210 — bounty PDF explicitly mandates iOS 17+ (arm64) CI coverage
+    # alongside macOS 14+. SwiftPM can't drive iOS Simulator runs directly,
+    # so this job uses `xcodebuild` against the SwiftPM-generated QVACClient
+    # scheme. The build links BareKit.xcframework's iOS slices; the test pass
+    # validates the QVAC core (codec, RPC, generated types, BareKit transport
+    # protocol conformance). UDS + subprocess integration tests are guarded
+    # behind `#if !os(iOS)` in their respective files — iOS hosts can't spawn
+    # subprocesses, so the macOS/Linux fixtures don't apply.
+    #
+    # Note for local repro: on macOS Sequoia, the iOS Simulator's xctest
+    # process is denied access to files under ~/Desktop by the system's
+    # Privacy & Security > Files and Folders policy. If `xcodebuild test`
+    # fails locally with "Failed to create a bundle instance representing
+    # ...", move the checkout out of Desktop or pass `-derivedDataPath
+    # $TMPDIR/dd-ios`. GH Actions runners check out to /Users/runner/work,
+    # which is not a protected folder, so this never trips in CI.
+    name: swift build + test (iOS 17 Simulator, ARM64)
+    runs-on: macos-14
+    timeout-minutes: 25
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.0.app/Contents/Developer
+      # iPhone 16 is the latest model in the macos-14 runner image's
+      # default simulator set. iOS 17 deployment target keeps the
+      # bounty requirement; pinned simulator OS uses whatever ships
+      # with the runner's Xcode 16 image (currently 18.x — that's
+      # forward-compatible with the iOS 17 deployment target).
+      IOS_SIM_NAME: iPhone 16
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.0.app
+
+      - name: Swift + Xcode versions
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: build/derived-data-ios
+          key: dd-ios-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            dd-ios-${{ runner.os }}-
+
+      - name: Cache SwiftPM package resolution
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/org.swift.swiftpm
+          key: spm-ios-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            spm-ios-${{ runner.os }}-
+
+      - name: Download BareKit.xcframework
+        run: ./scripts/download-barekit.sh
+
+      - name: Resolve SPM dependencies
+        run: swift package resolve
+
+      - name: Pick a usable iOS Simulator destination
+        id: pick-sim
+        run: |
+          set -euo pipefail
+          # Find the first available iPhone 16 simulator on whatever iOS
+          # version the runner image ships (Apple regularly bumps the
+          # default minor between Xcode 16.0/16.1/etc.). Falls back to
+          # any "iPhone" simulator if the preferred model is absent.
+          SIM_LINE=$(xcrun simctl list devices available \
+            | grep -E "^[[:space:]]+${IOS_SIM_NAME} \(" \
+            | head -n 1 || true)
+          if [[ -z "$SIM_LINE" ]]; then
+            echo "Preferred '${IOS_SIM_NAME}' not found; falling back to first iPhone."
+            SIM_LINE=$(xcrun simctl list devices available \
+              | grep -E "^[[:space:]]+iPhone" | head -n 1)
+          fi
+          # Line format: `    NAME (UUID) (state)`
+          SIM_NAME=$(echo "$SIM_LINE" | sed -E 's/^[[:space:]]+(.+) \([0-9A-F-]+\) \(.+\)$/\1/')
+          SIM_UDID=$(echo "$SIM_LINE" | sed -E 's/^.*\(([0-9A-F-]+)\).*$/\1/')
+          echo "Using simulator: $SIM_NAME ($SIM_UDID)"
+          echo "sim_name=$SIM_NAME" >> "$GITHUB_OUTPUT"
+          echo "sim_udid=$SIM_UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Build for iOS Simulator
+        run: |
+          xcodebuild \
+            -scheme QVACClient \
+            -destination "platform=iOS Simulator,id=${{ steps.pick-sim.outputs.sim_udid }}" \
+            -derivedDataPath build/derived-data-ios \
+            -skipMacroValidation \
+            build
+
+      - name: Test on iOS Simulator
+        run: |
+          xcodebuild \
+            -scheme QVACClient \
+            -destination "platform=iOS Simulator,id=${{ steps.pick-sim.outputs.sim_udid }}" \
+            -derivedDataPath build/derived-data-ios \
+            -skipMacroValidation \
+            test
 
   codegen-drift:
     name: codegen drift (no diff vs committed Generated/)

@@ -58,3 +58,7 @@ coverage/
 # YK-206 — BareKit.xcframework is downloaded locally via
 # scripts/download-barekit.sh, not committed. ~20MB.
 Vendor/BareKit.xcframework/
+
+# YK-210 — iOS Simulator xcodebuild derived data (relative path used by CI;
+# local devs can also run there or under $TMPDIR — see ci.yml swift-ios job).
+build/
