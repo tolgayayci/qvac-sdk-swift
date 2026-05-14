@@ -9,10 +9,12 @@ to the [QVAC SDK](https://github.com/tetherto/qvac)'s on-device AI capabilities 
 completion, embeddings, transcription, translation, text-to-speech, OCR, diffusion, RAG,
 and custom plugins — without going through React Native or a JS bridge.
 
-> **Status: pre-release (M1 in progress).** No usable public API yet — surface lands
-> across milestones M1 → M3. See [`CHANGELOG.md`](./CHANGELOG.md) for the per-milestone
-> shipping plan and the project's [Linear board](https://linear.app/yk-labs/project/qvac-sdk-swift-client-tether-bounty)
-> for live status. Tracking issue range: **YK-174 → YK-229** (16 M1, 16 M2, 13 M3, 5 application).
+> **Status: M1 complete.** 17 canonical M1 issues green, full DoD met,
+> tag `v0.1.0-m1` prepared and held until the bounty application is
+> accepted (YK-227 / YK-229). Read [`docs/m1-summary.md`](./docs/m1-summary.md)
+> for the reviewer-facing handoff (deliverables × evidence × commit
+> references). M2 and M3 remain.
+> Tracking issue range: **YK-174 → YK-229** (17 M1 canonical + 5 duplicate IDs, 16 M2, 13 M3, 5 application).
 
 ## Plan
 
@@ -61,12 +63,21 @@ The Swift surface is a faithful (and idiomatically async/await + actor-based) po
 
 ## Documentation
 
+- **[`docs/m1-summary.md`](./docs/m1-summary.md)** — M1 reviewer-facing handoff:
+  deliverables × evidence × issue crosswalk × verification artifacts. Start here if
+  you're reviewing the milestone.
 - **[`docs/qvac-sdk-internals.md`](./docs/qvac-sdk-internals.md)** — full SDK wire model:
   request type registry (31 handlers), error code tables (4 ranges, 128 codes), `__init_config`
   handshake, per-method request/response shapes.
 - **[`docs/bare-rpc-wire-protocol.md`](./docs/bare-rpc-wire-protocol.md)** — byte-level frame
   layout, OPEN handshake, PAUSE/RESUME backpressure, end-of-stream vs destroy semantics,
   byte-exact hex fixtures.
+- **[`docs/dependencies.md`](./docs/dependencies.md)** — pin policy for SPM/npm deps,
+  swift-format & Node version requirements.
+- **[`docs/codegen.md`](./docs/codegen.md)** — how to run the codegen pipeline; recovery
+  steps when CI's drift check fires.
+- **[`docs/codegen-deferred.md`](./docs/codegen-deferred.md)** — the deferred set of SDK
+  types routed through `AnyCodable` in M1; drained by M2/M3 codegen passes.
 
 ## Building locally
 
