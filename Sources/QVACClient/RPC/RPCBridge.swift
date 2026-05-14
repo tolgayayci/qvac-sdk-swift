@@ -149,11 +149,32 @@ public actor RPCBridge {
   /// `AsyncThrowingStream` terminates when the worker sends `END`/`CLOSE`;
   /// abandoning the consumer (e.g. `break`-ing out of `for try await`)
   /// triggers `IncomingStream.destroy()` so the worker stops producing.
+  ///
+  /// `bufferSize` controls the AsyncStream's buffering policy (YK-199):
+  ///
+  /// - `nil` (default): **unbounded** buffer. Matches JS SDK behavior.
+  ///   Pending chunks accumulate in memory if the consumer is slow —
+  ///   risk of OOM on long streams against a fast producer. Suitable
+  ///   for short streams or fast consumers.
+  /// - positive `Int`: **bounded** buffer via `.bufferingNewest(N)`.
+  ///   Caps memory at N chunks; if the producer outpaces the consumer
+  ///   sustainably, the OLDEST chunks are dropped (lossy). Suitable
+  ///   for telemetry / log streams where freshness matters more than
+  ///   completeness.
+  ///
+  /// True consumer-driven PAUSE/RESUME (the producer slows down rather
+  /// than the buffer dropping chunks) needs an upstream
+  /// `BareRPC.IncomingStream.cork() / uncork()` API which doesn't
+  /// exist yet — tracked in `docs/application/open-questions.md` §3.3
+  /// and `docs/backpressure.md`.
   public nonisolated func streamResponse<Req: Encodable, Chunk: Decodable>(
     command: UInt,
-    _ req: Req
+    _ req: Req,
+    bufferSize: Int? = nil
   ) -> AsyncThrowingStream<Chunk, Error> {
-    AsyncThrowingStream<Chunk, Error> { continuation in
+    let policy: AsyncThrowingStream<Chunk, Error>.Continuation.BufferingPolicy =
+      bufferSize.map { .bufferingNewest($0) } ?? .unbounded
+    return AsyncThrowingStream<Chunk, Error>(bufferingPolicy: policy) { continuation in
       let task = Task { [weak self] in
         guard let self else {
           continuation.finish(throwing: QVACError.transport(.transportClosed))

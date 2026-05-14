@@ -27,11 +27,14 @@ extension QVACClient {
   }
 
   /// Routes wire command `completionStream` (server-streamed response).
-  public nonisolated func completion(_ request: AnyCodable = AnyCodable(.null))
-    -> AsyncThrowingStream<AnyCodable, Error>
-  {
+  /// `bufferSize` (nil = unbounded; positive = bufferingNewest(N))
+  /// trades memory cap against drop-oldest-under-flood; see
+  /// `docs/backpressure.md`.
+  public nonisolated func completion(
+    _ request: AnyCodable = AnyCodable(.null), bufferSize: Int? = nil
+  ) -> AsyncThrowingStream<AnyCodable, Error> {
     return self.streamResponse(
-      command: .completionStream, request)
+      command: .completionStream, request, bufferSize: bufferSize)
   }
 
   /// Routes wire command `deleteCache` (reply).
@@ -45,11 +48,14 @@ extension QVACClient {
   }
 
   /// Routes wire command `diffusionStream` (server-streamed response).
-  public nonisolated func diffusion(_ request: AnyCodable = AnyCodable(.null))
-    -> AsyncThrowingStream<AnyCodable, Error>
-  {
+  /// `bufferSize` (nil = unbounded; positive = bufferingNewest(N))
+  /// trades memory cap against drop-oldest-under-flood; see
+  /// `docs/backpressure.md`.
+  public nonisolated func diffusion(
+    _ request: AnyCodable = AnyCodable(.null), bufferSize: Int? = nil
+  ) -> AsyncThrowingStream<AnyCodable, Error> {
     return self.streamResponse(
-      command: .diffusionStream, request)
+      command: .diffusionStream, request, bufferSize: bufferSize)
   }
 
   /// Routes wire command `downloadAsset` (reply).
@@ -107,11 +113,14 @@ extension QVACClient {
   }
 
   /// Routes wire command `pluginInvokeStream` (server-streamed response).
-  public nonisolated func invokePluginStream(_ request: AnyCodable = AnyCodable(.null))
-    -> AsyncThrowingStream<AnyCodable, Error>
-  {
+  /// `bufferSize` (nil = unbounded; positive = bufferingNewest(N))
+  /// trades memory cap against drop-oldest-under-flood; see
+  /// `docs/backpressure.md`.
+  public nonisolated func invokePluginStream(
+    _ request: AnyCodable = AnyCodable(.null), bufferSize: Int? = nil
+  ) -> AsyncThrowingStream<AnyCodable, Error> {
     return self.streamResponse(
-      command: .pluginInvokeStream, request)
+      command: .pluginInvokeStream, request, bufferSize: bufferSize)
   }
 
   /// Routes wire command `loadModel` (reply).
@@ -123,11 +132,14 @@ extension QVACClient {
   }
 
   /// Routes wire command `loggingStream` (server-streamed response).
-  public nonisolated func loggingStream(_ request: AnyCodable = AnyCodable(.null))
-    -> AsyncThrowingStream<AnyCodable, Error>
-  {
+  /// `bufferSize` (nil = unbounded; positive = bufferingNewest(N))
+  /// trades memory cap against drop-oldest-under-flood; see
+  /// `docs/backpressure.md`.
+  public nonisolated func loggingStream(
+    _ request: AnyCodable = AnyCodable(.null), bufferSize: Int? = nil
+  ) -> AsyncThrowingStream<AnyCodable, Error> {
     return self.streamResponse(
-      command: .loggingStream, request)
+      command: .loggingStream, request, bufferSize: bufferSize)
   }
 
   /// Routes wire command `modelRegistryGetModel` (reply).
@@ -161,11 +173,14 @@ extension QVACClient {
   }
 
   /// Routes wire command `ocrStream` (server-streamed response).
-  public nonisolated func ocr(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
-    AnyCodable, Error
-  > {
+  /// `bufferSize` (nil = unbounded; positive = bufferingNewest(N))
+  /// trades memory cap against drop-oldest-under-flood; see
+  /// `docs/backpressure.md`.
+  public nonisolated func ocr(_ request: AnyCodable = AnyCodable(.null), bufferSize: Int? = nil)
+    -> AsyncThrowingStream<AnyCodable, Error>
+  {
     return self.streamResponse(
-      command: .ocrStream, request)
+      command: .ocrStream, request, bufferSize: bufferSize)
   }
 
   /// Routes wire command `rag` (reply).
@@ -281,47 +296,56 @@ extension QVACClient {
   }
 
   /// Routes wire command `textToSpeech` (server-streamed response).
-  public nonisolated func textToSpeech(_ request: AnyCodable = AnyCodable(.null))
-    -> AsyncThrowingStream<AnyCodable, Error>
-  {
+  /// `bufferSize` (nil = unbounded; positive = bufferingNewest(N))
+  /// trades memory cap against drop-oldest-under-flood; see
+  /// `docs/backpressure.md`.
+  public nonisolated func textToSpeech(
+    _ request: AnyCodable = AnyCodable(.null), bufferSize: Int? = nil
+  ) -> AsyncThrowingStream<AnyCodable, Error> {
     return self.streamResponse(
-      command: .textToSpeech, request)
+      command: .textToSpeech, request, bufferSize: bufferSize)
   }
 
   /// Routes wire command `textToSpeechStream` (duplex — request and
   /// response streams both run). Full duplex API design lands in
   /// M2 (YK-202 / YK-204); M1 surfaces a single-stream stub.
-  public nonisolated func textToSpeechStream(_ request: AnyCodable = AnyCodable(.null))
-    -> AsyncThrowingStream<AnyCodable, Error>
-  {
+  public nonisolated func textToSpeechStream(
+    _ request: AnyCodable = AnyCodable(.null), bufferSize: Int? = nil
+  ) -> AsyncThrowingStream<AnyCodable, Error> {
     return self.streamResponse(
-      command: .textToSpeechStream, request)
+      command: .textToSpeechStream, request, bufferSize: bufferSize)
   }
 
   /// Routes wire command `transcribe` (server-streamed response).
-  public nonisolated func transcribe(_ request: AnyCodable = AnyCodable(.null))
-    -> AsyncThrowingStream<AnyCodable, Error>
-  {
+  /// `bufferSize` (nil = unbounded; positive = bufferingNewest(N))
+  /// trades memory cap against drop-oldest-under-flood; see
+  /// `docs/backpressure.md`.
+  public nonisolated func transcribe(
+    _ request: AnyCodable = AnyCodable(.null), bufferSize: Int? = nil
+  ) -> AsyncThrowingStream<AnyCodable, Error> {
     return self.streamResponse(
-      command: .transcribe, request)
+      command: .transcribe, request, bufferSize: bufferSize)
   }
 
   /// Routes wire command `transcribeStream` (duplex — request and
   /// response streams both run). Full duplex API design lands in
   /// M2 (YK-202 / YK-204); M1 surfaces a single-stream stub.
-  public nonisolated func transcribeStream(_ request: AnyCodable = AnyCodable(.null))
-    -> AsyncThrowingStream<AnyCodable, Error>
-  {
+  public nonisolated func transcribeStream(
+    _ request: AnyCodable = AnyCodable(.null), bufferSize: Int? = nil
+  ) -> AsyncThrowingStream<AnyCodable, Error> {
     return self.streamResponse(
-      command: .transcribeStream, request)
+      command: .transcribeStream, request, bufferSize: bufferSize)
   }
 
   /// Routes wire command `translate` (server-streamed response).
-  public nonisolated func translate(_ request: AnyCodable = AnyCodable(.null))
-    -> AsyncThrowingStream<AnyCodable, Error>
-  {
+  /// `bufferSize` (nil = unbounded; positive = bufferingNewest(N))
+  /// trades memory cap against drop-oldest-under-flood; see
+  /// `docs/backpressure.md`.
+  public nonisolated func translate(
+    _ request: AnyCodable = AnyCodable(.null), bufferSize: Int? = nil
+  ) -> AsyncThrowingStream<AnyCodable, Error> {
     return self.streamResponse(
-      command: .translate, request)
+      command: .translate, request, bufferSize: bufferSize)
   }
 
   /// Routes wire command `unloadModel` (reply).
@@ -331,10 +355,13 @@ extension QVACClient {
   }
 
   /// Routes wire command `upscaleStream` (server-streamed response).
-  public nonisolated func upscale(_ request: AnyCodable = AnyCodable(.null)) -> AsyncThrowingStream<
-    AnyCodable, Error
-  > {
+  /// `bufferSize` (nil = unbounded; positive = bufferingNewest(N))
+  /// trades memory cap against drop-oldest-under-flood; see
+  /// `docs/backpressure.md`.
+  public nonisolated func upscale(_ request: AnyCodable = AnyCodable(.null), bufferSize: Int? = nil)
+    -> AsyncThrowingStream<AnyCodable, Error>
+  {
     return self.streamResponse(
-      command: .upscaleStream, request)
+      command: .upscaleStream, request, bufferSize: bufferSize)
   }
 }

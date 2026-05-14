@@ -36,14 +36,23 @@ extension QVACClient {
   /// abandoning the consumer triggers `IncomingStream.destroy()` so the
   /// worker stops producing.
   ///
+  /// `bufferSize` controls back-of-the-actor buffering (YK-199): `nil`
+  /// is unbounded (default; matches JS SDK), a positive `Int` switches
+  /// to `.bufferingNewest(N)` which caps memory but drops oldest
+  /// chunks under sustained flood. See `docs/backpressure.md` for the
+  /// trade-off and the upstream-gap note.
+  ///
   /// `nonisolated` so the returned `AsyncThrowingStream` can be handed
   /// to the caller synchronously — the actor work (envelope build +
   /// bridge call) happens inside the stream's continuation closure.
   internal nonisolated func streamResponse<Req: Encodable, Chunk: Decodable>(
     command: QVACCommand,
-    _ request: Req
+    _ request: Req,
+    bufferSize: Int? = nil
   ) -> AsyncThrowingStream<Chunk, Error> {
-    AsyncThrowingStream<Chunk, Error> { continuation in
+    let policy: AsyncThrowingStream<Chunk, Error>.Continuation.BufferingPolicy =
+      bufferSize.map { .bufferingNewest($0) } ?? .unbounded
+    return AsyncThrowingStream<Chunk, Error>(bufferingPolicy: policy) { continuation in
       let task = Task { [weak self] in
         guard let self else {
           continuation.finish(throwing: QVACError.transport(.transportClosed))
@@ -51,7 +60,8 @@ extension QVACClient {
         }
         do {
           let inner: AsyncThrowingStream<Chunk, Error> =
-            try await self.openStream(command: command, request: request)
+            try await self.openStream(
+              command: command, request: request, bufferSize: bufferSize)
           for try await chunk in inner {
             if Task.isCancelled { break }
             continuation.yield(chunk)
@@ -73,11 +83,13 @@ extension QVACClient {
   /// from the streamResponse Task (post-actor-hop).
   private func openStream<Req: Encodable, Chunk: Decodable>(
     command: QVACCommand,
-    request: Req
+    request: Req,
+    bufferSize: Int?
   ) async throws -> AsyncThrowingStream<Chunk, Error> {
     let bridge = try requireBridge()
     let envelope = try buildEnvelope(type: command.rawValue, request: request)
-    return bridge.streamResponse(command: Self.bareRpcCommand, envelope)
+    return bridge.streamResponse(
+      command: Self.bareRpcCommand, envelope, bufferSize: bufferSize)
   }
 
   /// Re-frame the user's request as a `[String: AnyCodable]` and inject

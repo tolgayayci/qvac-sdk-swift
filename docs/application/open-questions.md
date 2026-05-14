@@ -187,15 +187,30 @@ maximum cleanup latency we should advertise?
 bounded by one model inference step (~50-200ms on Apple Silicon). We'll
 expose this as a caveat in the M3 DocC tutorial.
 
-### 3.3 Backpressure behaviour
+### 3.3 Backpressure behaviour + `IncomingStream.cork()` upstream
 
-**Question.** `bare-rpc` ships PAUSE/RESUME stream-flow flags. Does
-the QVAC worker honor them (i.e. stop generating when paused) or just
-buffer-and-drop?
+**Context.** `bare-rpc-swift` ships `cork() / uncork()` only on
+`OutgoingStream` (producer side). The consumer side (`IncomingStream`)
+has no symmetric pair, so a client SDK can't send PAUSE/RESUME flags
+back to the producer when its consumer is slow. The bare-rpc wire
+protocol supports both directions (PR #13 work) but the Swift surface
+doesn't.
 
-**Our proposed answer.** Honors them by gating its `request.send()`
-loop; our Swift consumer maps `AsyncThrowingStream` consumer back-
-pressure to `BareRPC.OutgoingStream.cork()`/`uncork()`.
+YK-199 (M2-BACKPRESSURE) ships consumer-side bounded buffering via
+`AsyncStream.bufferingPolicy = .bufferingNewest(N)` as a partial
+mitigation — drops oldest chunks under flood, doesn't slow the
+producer. See `docs/backpressure.md`.
+
+**Questions.**
+- Does the QVAC Bare worker honor the PAUSE flag today (i.e. stop
+  generating when paused), or does it buffer-and-drop?
+- Are you open to a `IncomingStream.cork() / uncork()` PR against
+  `bare-rpc-swift`? The fix is small; we'd ship the flow-controller
+  actor on top.
+
+**Our proposed answer.** Worker honors PAUSE by gating its
+`request.send()` loop (matches the JS client's behavior); upstream
+PR is welcome and we'll send it.
 
 ---
 

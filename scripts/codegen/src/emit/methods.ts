@@ -244,22 +244,35 @@ function emitMethodSignature(out: string[], method: MethodSpec): void {
     }
     case "stream": {
       const chunkSwift = formatResponseType(method);
+      const params = requestParam
+        ? `${requestParam}, bufferSize: Int? = nil`
+        : `bufferSize: Int? = nil`;
       out.push(`  /// Routes wire command \`${command}\` (server-streamed response).`);
+      out.push(`  /// \`bufferSize\` (nil = unbounded; positive = bufferingNewest(N))`);
+      out.push(`  /// trades memory cap against drop-oldest-under-flood; see`);
+      out.push(`  /// \`docs/backpressure.md\`.`);
       out.push(
-        `  public nonisolated func ${method.name}(${requestParam}) -> AsyncThrowingStream<${chunkSwift}, Error> {`,
+        `  public nonisolated func ${method.name}(${params}) -> AsyncThrowingStream<${chunkSwift}, Error> {`,
       );
       out.push(`    return self.streamResponse(`);
-      out.push(`      command: .${camelFromWire(command)}, ${requestValue})`);
+      out.push(
+        `      command: .${camelFromWire(command)}, ${requestValue}, bufferSize: bufferSize)`,
+      );
       out.push("  }");
       break;
     }
     case "duplex": {
+      const params = requestParam
+        ? `${requestParam}, bufferSize: Int? = nil`
+        : `bufferSize: Int? = nil`;
       out.push(`  /// Routes wire command \`${command}\` (duplex — request and`);
       out.push("  /// response streams both run). Full duplex API design lands in");
       out.push("  /// M2 (YK-202 / YK-204); M1 surfaces a single-stream stub.");
-      out.push(`  public nonisolated func ${method.name}(${requestParam}) -> AsyncThrowingStream<AnyCodable, Error> {`);
+      out.push(`  public nonisolated func ${method.name}(${params}) -> AsyncThrowingStream<AnyCodable, Error> {`);
       out.push(`    return self.streamResponse(`);
-      out.push(`      command: .${camelFromWire(command)}, ${requestValue})`);
+      out.push(
+        `      command: .${camelFromWire(command)}, ${requestValue}, bufferSize: bufferSize)`,
+      );
       out.push("  }");
       break;
     }
