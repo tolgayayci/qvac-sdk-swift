@@ -88,8 +88,12 @@ jobs:
         with:
           node-version: 24.x
 
-      - name: Install Bare fixture deps
+      - name: Install Bare fixture deps (ping)
         working-directory: Tests/Fixtures/ping-server
+        run: npm ci
+
+      - name: Install Bare fixture deps (qvac-worker, YK-208)
+        working-directory: Tests/Fixtures/qvac-worker
         run: npm ci
 
       - name: Resolve SPM dependencies
