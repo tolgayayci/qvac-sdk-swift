@@ -151,6 +151,36 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
       let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
       await request.reply(data)
 
+    case "completionStream":
+      // YK-202. Emit `behavior.streamCount` `{token: "tok-<i>"}` chunks
+      // followed by a terminal `{finish: "stop", stats: {...}}`.
+      guard let stream = await request.createResponseStream() else {
+        await request.reject("could not open stream", code: "E_STREAM", errno: -1)
+        return
+      }
+      for i in 0..<behavior.streamCount {
+        let chunk: [String: Any] = ["token": "tok-\(i)"]
+        let data = (try? JSONSerialization.data(withJSONObject: chunk)) ?? Data()
+        var withNewline = data
+        withNewline.append(0x0A)
+        await stream.write(withNewline)
+        if behavior.streamIntervalMs > 0 {
+          try? await Task.sleep(nanoseconds: behavior.streamIntervalMs * 1_000_000)
+        }
+      }
+      let finishBody: [String: Any] = [
+        "finish": "stop",
+        "stats": [
+          "generatedTokens": Double(behavior.streamCount),
+          "totalTimeMs": Double(behavior.streamCount * 5),
+        ],
+      ]
+      let finishData = (try? JSONSerialization.data(withJSONObject: finishBody)) ?? Data()
+      var withNewline = finishData
+      withNewline.append(0x0A)
+      await stream.write(withNewline)
+      await stream.end()
+
     case "loadModel":
       // YK-201. Reply with `{modelId, type: "loadModel"}` on the
       // happy path; emit a wire SDK error frame (code 52001 =
