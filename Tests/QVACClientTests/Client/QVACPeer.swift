@@ -151,6 +151,22 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
       let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
       await request.reply(data)
 
+    case "embed":
+      // YK-203. Reply with `{type:"embed", success: true, embedding: [[...],
+      // [...]]}`. The stub vector is just `[Double(i)]` per input — enough
+      // to verify the shape mapping (single-vector vs batch).
+      let texts = (body?["text"] as? [Any]) ?? []
+      let vectors: [[Double]] = texts.enumerated().map { i, _ in
+        [Double(i), Double(i) * 0.5, Double(i) * 0.25]
+      }
+      let reply: [String: Any] = [
+        "type": "embed",
+        "success": true,
+        "embedding": vectors,
+      ]
+      let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
+      await request.reply(data)
+
     case "completionStream":
       // YK-202. Emit `behavior.streamCount` `{token: "tok-<i>"}` chunks
       // followed by a terminal `{finish: "stop", stats: {...}}`.
