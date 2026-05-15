@@ -1,0 +1,32 @@
+# YK-220 — Swift Package Index manifest.
+#
+# Lands when the repo is pushed under its final org/name (gated
+# on YK-229 application acceptance). SPI auto-builds the package
+# across Swift versions + platforms and hosts the DocC archive
+# at https://swiftpackageindex.com/<org>/qvac-sdk-swift/documentation/.
+#
+# Reference: https://swiftpackageindex.com/SwiftPackageIndex/SPIManifest
+
+version: 1
+
+# Build matrix for the SPI badge.
+builder:
+  configs:
+    - platform: macos-spm
+      scheme: QVACClient
+    - platform: ios
+      scheme: QVACClient
+      destination: generic/platform=iOS Simulator
+
+# DocC hosting. SPI picks up the QVACClient.docc/ catalog
+# automatically; the documentation_targets field is the canonical
+# way to declare which targets carry the catalog.
+external_links:
+  documentation:
+    - https://swiftpackageindex.com/tolgayayci/qvac-sdk-swift/documentation/qvacclient
+
+# Skip the example app — it's a separate SPM package under
+# Examples/QVACChat/ with a path dep on the main package; SPI's
+# builder would otherwise try to build it as part of the manifest.
+metadata:
+  authors: "Tolga Yaycı"
