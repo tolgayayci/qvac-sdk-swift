@@ -1,0 +1,129 @@
+name: DocC
+
+# YK-217 — Publish the DocC archive to GitHub Pages on every
+# push to `main` and on each tag. Uses Xcode's `xcodebuild
+# docbuild` (handles the BareKit.xcframework binary target
+# natively, unlike the SwiftPM `swift-docc-plugin` which drops
+# the framework search path for Clang during symbol extraction).
+#
+# Page activation (enabling GitHub Pages on the repo settings
+# page) is gated on the bounty application acceptance (YK-229);
+# this workflow is wired so it activates on first run once the
+# upstream Pages site is enabled.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; cancel in-progress runs on
+# the same ref so a stream of pushes doesn't queue duplicates.
+concurrency:
+  group: docc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-docc:
+    name: Build DocC archive
+    runs-on: macos-14
+    timeout-minutes: 25
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.0.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: sudo xcode-select -s /Applications/Xcode_16.0.app
+
+      - name: Download BareKit.xcframework
+        run: ./scripts/download-barekit.sh
+
+      - name: Run DocC coverage audit
+        # Independent gate on public-symbol coverage. Catches doc
+        # rot before the archive build. 95% threshold.
+        run: ./scripts/docc-coverage.sh 95
+
+      - name: Resolve SPM dependencies
+        run: swift package resolve
+
+      - name: Build DocC archive
+        # `xcodebuild docbuild` uses Xcode's docc-build pipeline
+        # which understands xcframework binary targets. The
+        # SwiftPM `swift-docc-plugin` invocation fails on the
+        # BareKit dep — Clang doesn't see the framework search
+        # path during symbol-graph extract. See YK-215 commit
+        # message for the full diagnosis.
+        run: |
+          xcodebuild docbuild \
+            -scheme QVACClient \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build/docbuild
+
+      - name: Find the archive
+        id: archive
+        run: |
+          archive=$(find build/docbuild -name 'QVACClient.doccarchive' -type d | head -n 1)
+          if [[ -z "$archive" ]]; then
+            echo "::error::QVACClient.doccarchive not found in build/docbuild"
+            exit 1
+          fi
+          echo "path=$archive" >> "$GITHUB_OUTPUT"
+          size=$(du -sh "$archive" | cut -f1)
+          echo "Archive size: $size"
+
+      - name: Transform for static hosting
+        # DocC archives need a transform step before they can be
+        # served from a non-root URL. `--hosting-base-path`
+        # rewrites internal links to use `<repo>` as the base
+        # so GH Pages at `<user>.github.io/<repo>/` works.
+        run: |
+          xcrun docc process-archive transform-for-static-hosting \
+            "${{ steps.archive.outputs.path }}" \
+            --hosting-base-path qvac-sdk-swift \
+            --output-path build/docs
+
+      - name: Add index redirect
+        # GH Pages serves index.html at the root; redirect to the
+        # DocC entry so visitors land in the module overview.
+        run: |
+          cat > build/docs/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <title>QVACClient documentation</title>
+              <meta http-equiv="refresh" content="0; url=documentation/qvacclient/">
+              <link rel="canonical" href="documentation/qvacclient/">
+            </head>
+            <body>
+              <p>Redirecting to
+                <a href="documentation/qvacclient/">QVACClient documentation</a>…
+              </p>
+            </body>
+          </html>
+          EOF
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/docs
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build-docc
+    # Only deploy from main / tags — not from PR builds.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
