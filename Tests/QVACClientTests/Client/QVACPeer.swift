@@ -35,6 +35,18 @@ final class QVACPeer: @unchecked Sendable {
     /// element produces one hit with descending score
     /// (`1.0 - 0.1*index`). YK-212.
     var ragSeededDocuments: [String] = []
+    /// Workspaces the rag listWorkspaces stub returns. YK-213.
+    var ragWorkspaces: [WorkspaceEntry] = []
+
+    /// Workspace entry returned by the listWorkspaces stub.
+    struct WorkspaceEntry: Sendable, Equatable {
+      let name: String
+      let open: Bool
+      init(name: String, open: Bool = true) {
+        self.name = name
+        self.open = open
+      }
+    }
 
     init(
       streamCount: Int = 10,
@@ -42,7 +54,8 @@ final class QVACPeer: @unchecked Sendable {
       failInitConfig: Bool = false,
       initFailureMessage: String = "init config rejected by test peer",
       loadedModelId: String? = "test-model-abc",
-      ragSeededDocuments: [String] = []
+      ragSeededDocuments: [String] = [],
+      ragWorkspaces: [WorkspaceEntry] = []
     ) {
       self.streamCount = streamCount
       self.streamIntervalMs = streamIntervalMs
@@ -50,6 +63,7 @@ final class QVACPeer: @unchecked Sendable {
       self.initFailureMessage = initFailureMessage
       self.loadedModelId = loadedModelId
       self.ragSeededDocuments = ragSeededDocuments
+      self.ragWorkspaces = ragWorkspaces
     }
   }
 
@@ -372,10 +386,103 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
           await request.reply(data)
         }
 
+      case "saveEmbeddings":
+        // YK-213. Accept the documents and reply with one fulfilled
+        // entry per input, echoing the input id.
+        let docs = (body?["documents"] as? [[String: Any]]) ?? []
+        let processed: [[String: Any]] = docs.enumerated().map { i, d in
+          let id = (d["id"] as? String) ?? "saved-\(i)"
+          return ["status": "fulfilled", "id": id]
+        }
+        let reply: [String: Any] = [
+          "type": "rag",
+          "operation": "saveEmbeddings",
+          "success": true,
+          "processed": processed,
+        ]
+        let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
+        await request.reply(data)
+
+      case "deleteEmbeddings":
+        let reply: [String: Any] = [
+          "type": "rag",
+          "operation": "deleteEmbeddings",
+          "success": true,
+        ]
+        let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
+        await request.reply(data)
+
+      case "reindex":
+        let withProgress = (body?["withProgress"] as? Bool) ?? false
+        let workspace = (body?["workspace"] as? String) ?? "default"
+        let final: [String: Any] = [
+          "type": "rag",
+          "operation": "reindex",
+          "success": true,
+          "result": ["reindexed": true, "details": ["chunks": 42]],
+        ]
+        if withProgress {
+          guard let stream = await request.createResponseStream() else {
+            await request.reject("could not open stream", code: "E_STREAM", errno: -1)
+            return
+          }
+          for (i, stage) in ["preparing", "rebuilding", "swapping"].enumerated() {
+            let body: [String: Any] = [
+              "type": "rag:progress",
+              "operation": "reindex",
+              "workspace": workspace,
+              "stage": stage,
+              "current": i + 1,
+              "total": 3,
+              "timestamp": Date().timeIntervalSince1970 * 1000.0,
+            ]
+            let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
+            var withNewline = data
+            withNewline.append(0x0A)
+            await stream.write(withNewline)
+          }
+          let finalData = (try? JSONSerialization.data(withJSONObject: final)) ?? Data()
+          var withNewline = finalData
+          withNewline.append(0x0A)
+          await stream.write(withNewline)
+          await stream.end()
+        } else {
+          let data = (try? JSONSerialization.data(withJSONObject: final)) ?? Data()
+          await request.reply(data)
+        }
+
+      case "listWorkspaces":
+        let workspaces: [[String: Any]] = behavior.ragWorkspaces.map {
+          ["name": $0.name, "open": $0.open]
+        }
+        let reply: [String: Any] = [
+          "type": "rag",
+          "operation": "listWorkspaces",
+          "success": true,
+          "workspaces": workspaces,
+        ]
+        let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
+        await request.reply(data)
+
+      case "closeWorkspace":
+        let reply: [String: Any] = [
+          "type": "rag",
+          "operation": "closeWorkspace",
+          "success": true,
+        ]
+        let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
+        await request.reply(data)
+
+      case "deleteWorkspace":
+        let reply: [String: Any] = [
+          "type": "rag",
+          "operation": "deleteWorkspace",
+          "success": true,
+        ]
+        let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
+        await request.reply(data)
+
       default:
-        // Other rag operations (saveEmbeddings, listWorkspaces, etc.)
-        // land in YK-213 — for now reply with a `success: false`
-        // shape so tests targeting those see a clear error.
         let reply: [String: Any] = [
           "type": "rag",
           "operation": operation,

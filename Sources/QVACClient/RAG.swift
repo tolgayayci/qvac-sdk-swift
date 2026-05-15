@@ -456,7 +456,7 @@ extension QVACClient {
     return nil
   }
 
-  private static func intFrom(_ value: AnyCodableValue?) -> Int? {
+  internal static func intFrom(_ value: AnyCodableValue?) -> Int? {
     switch value {
     case .int(let i): return i
     case .double(let d): return Int(d)
