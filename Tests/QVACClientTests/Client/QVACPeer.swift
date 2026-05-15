@@ -31,19 +31,25 @@ final class QVACPeer: @unchecked Sendable {
     /// happy path; if `nil`, `loadModel` replies with an SDK error
     /// frame (`code: modelNotFound`).
     var loadedModelId: String? = "test-model-abc"
+    /// Documents the rag search stub returns hits for, in order. Each
+    /// element produces one hit with descending score
+    /// (`1.0 - 0.1*index`). YK-212.
+    var ragSeededDocuments: [String] = []
 
     init(
       streamCount: Int = 10,
       streamIntervalMs: UInt64 = 5,
       failInitConfig: Bool = false,
       initFailureMessage: String = "init config rejected by test peer",
-      loadedModelId: String? = "test-model-abc"
+      loadedModelId: String? = "test-model-abc",
+      ragSeededDocuments: [String] = []
     ) {
       self.streamCount = streamCount
       self.streamIntervalMs = streamIntervalMs
       self.failInitConfig = failInitConfig
       self.initFailureMessage = initFailureMessage
       self.loadedModelId = loadedModelId
+      self.ragSeededDocuments = ragSeededDocuments
     }
   }
 
@@ -270,6 +276,116 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
       }
       await stream.end()
 
+    case "rag":
+      // YK-212. Sub-dispatch on `operation`. Mirrors the
+      // discriminated-union shape in @qvac/sdk's rag schema.
+      let operation = (body?["operation"] as? String) ?? ""
+      switch operation {
+      case "chunk":
+        // Stub: 1 chunk per input character group of length 4.
+        let docs = Self.stringArray(body?["documents"]) ?? []
+        var chunks: [[String: Any]] = []
+        for (di, doc) in docs.enumerated() {
+          let strides = stride(from: 0, to: doc.count, by: 4)
+          for (ci, start) in strides.enumerated() {
+            let from = doc.index(doc.startIndex, offsetBy: start)
+            let to = doc.index(from, offsetBy: min(4, doc.count - start))
+            chunks.append([
+              "id": "doc-\(di)-chunk-\(ci)",
+              "content": String(doc[from..<to]),
+            ])
+          }
+        }
+        let reply: [String: Any] = [
+          "type": "rag",
+          "operation": "chunk",
+          "success": true,
+          "chunks": chunks,
+        ]
+        let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
+        await request.reply(data)
+
+      case "search":
+        // Stub: returns one hit per input document the test seeded
+        // via behavior.ragSeededDocuments. Score = 1.0 - 0.1*index.
+        let topK = (body?["topK"] as? Int) ?? 5
+        let seeded = behavior.ragSeededDocuments
+        let hits: [[String: Any]] = seeded.prefix(topK).enumerated().map { i, doc in
+          [
+            "id": "doc-\(i)",
+            "content": doc,
+            "score": 1.0 - 0.1 * Double(i),
+          ]
+        }
+        let reply: [String: Any] = [
+          "type": "rag",
+          "operation": "search",
+          "success": true,
+          "results": hits,
+        ]
+        let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
+        await request.reply(data)
+
+      case "ingest":
+        let withProgress = (body?["withProgress"] as? Bool) ?? false
+        let docs = Self.stringArray(body?["documents"]) ?? []
+        let workspace = (body?["workspace"] as? String) ?? "default"
+        let processed: [[String: Any]] = docs.enumerated().map { i, _ in
+          ["status": "fulfilled", "id": "ingest-\(i)"]
+        }
+        let final: [String: Any] = [
+          "type": "rag",
+          "operation": "ingest",
+          "success": true,
+          "processed": processed,
+          "droppedIndices": [Int](),
+        ]
+        if withProgress {
+          guard let stream = await request.createResponseStream() else {
+            await request.reject("could not open stream", code: "E_STREAM", errno: -1)
+            return
+          }
+          // Three progress frames then the final reply.
+          let stages = ["chunking", "embedding", "indexing"]
+          for (i, stage) in stages.enumerated() {
+            let body: [String: Any] = [
+              "type": "rag:progress",
+              "operation": "ingest",
+              "workspace": workspace,
+              "stage": stage,
+              "current": (i + 1) * docs.count / stages.count,
+              "total": docs.count,
+              "timestamp": Date().timeIntervalSince1970 * 1000.0,
+            ]
+            let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
+            var withNewline = data
+            withNewline.append(0x0A)
+            await stream.write(withNewline)
+          }
+          let finalData = (try? JSONSerialization.data(withJSONObject: final)) ?? Data()
+          var withNewline = finalData
+          withNewline.append(0x0A)
+          await stream.write(withNewline)
+          await stream.end()
+        } else {
+          let data = (try? JSONSerialization.data(withJSONObject: final)) ?? Data()
+          await request.reply(data)
+        }
+
+      default:
+        // Other rag operations (saveEmbeddings, listWorkspaces, etc.)
+        // land in YK-213 — for now reply with a `success: false`
+        // shape so tests targeting those see a clear error.
+        let reply: [String: Any] = [
+          "type": "rag",
+          "operation": operation,
+          "success": false,
+          "error": "test peer: unimplemented rag operation \(operation)",
+        ]
+        let data = (try? JSONSerialization.data(withJSONObject: reply)) ?? Data()
+        await request.reply(data)
+      }
+
     case "embed":
       // YK-203. Reply with `{type:"embed", success: true, embedding: [[...],
       // [...]]}`. The stub vector is just `[Double(i)]` per input — enough
@@ -401,5 +517,13 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
       return nil
     }
     return object
+  }
+
+  /// `documents` is either `String` or `[String]` on the wire. This
+  /// always returns `[String]` for the rag test stubs.
+  static func stringArray(_ value: Any?) -> [String]? {
+    if let arr = value as? [String] { return arr }
+    if let one = value as? String { return [one] }
+    return nil
   }
 }
