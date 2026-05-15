@@ -1,0 +1,170 @@
+@Tutorial(time: 10) {
+  @Intro(title: "Quickstart — your first streaming completion") {
+    Add QVACClient to a Swift package, spawn a Bare worker, load
+    a small LLM, and stream tokens to the terminal. Everything
+    runs on-device — no API keys, no cloud round-trip.
+
+    By the end you'll see Llama-3.2-1B answering "Hello, who are
+    you?" token-by-token.
+
+    @Image(source: "quickstart-hero.png", alt: "Terminal streaming tokens from Llama")
+  }
+
+  @Section(title: "Add the SPM dependency") {
+    @ContentAndMedia {
+      QVACClient is a Swift Package. Add it to your `Package.swift`
+      or to your Xcode project via *File → Add Package Dependencies*.
+
+      Two SwiftPM dependencies pull in: this package and
+      `bare-rpc-swift` (the wire-frame layer).
+    }
+
+    @Steps {
+      @Step {
+        Create a new Swift package.
+
+        @Code(name: "Terminal", file: "quickstart-01-init.sh")
+      }
+
+      @Step {
+        Open `Package.swift` and add the QVACClient dependency.
+
+        @Code(name: "Package.swift", file: "quickstart-02-package.swift")
+      }
+
+      @Step {
+        Pull dependencies.
+
+        @Code(name: "Terminal", file: "quickstart-03-resolve.sh")
+      }
+    }
+  }
+
+  @Section(title: "Stage BareKit + the Bare runtime") {
+    @ContentAndMedia {
+      QVACClient needs two pieces of native code at runtime:
+
+      - **`BareKit.xcframework`** — the JavaScript runtime that
+        hosts the QVAC worker. Apple's JavaScriptCore-flavored
+        variant (~20MB).
+      - **`bare`** — the Bare runtime binary, used by the spawn
+        factory to start the worker as a child process.
+
+      A setup script handles both.
+    }
+
+    @Steps {
+      @Step {
+        Clone the QVAC Swift client, run the BareKit setup
+        script, and install the test worker fixture (used in this
+        tutorial as the worker entrypoint).
+
+        @Code(name: "Terminal", file: "quickstart-04-setup.sh")
+      }
+    }
+  }
+
+  @Section(title: "Spawn the worker and run completion") {
+    @ContentAndMedia {
+      ``QVACClient/spawning(bareBinary:workerScript:initConfig:runtimeContext:acceptTimeout:)``
+      opens a UDS server, forks `bare worker.mjs`, waits for the
+      worker's IPC client to connect, runs the
+      `__init_config` handshake, and returns a ready
+      ``SpawnedClient``.
+
+      You only need to bring two paths: the `bare` binary and the
+      `worker.mjs` entry. Both come from the QVAC SDK npm install.
+    }
+
+    @Steps {
+      @Step {
+        Write the main file. Spawn the worker, load
+        `Llama-3.2-1B-Inst-Q4_0`, stream completion tokens.
+
+        @Code(name: "Sources/QuickstartTutorial/main.swift", file: "quickstart-05-main.swift")
+      }
+
+      @Step {
+        Run it.
+
+        @Code(name: "Terminal", file: "quickstart-06-run.sh")
+      }
+
+      @Step {
+        Tokens stream live to the terminal as the model generates.
+        First token appears within a few hundred milliseconds; full
+        response in a couple of seconds.
+
+        @Image(source: "quickstart-output.png", alt: "Streaming tokens in terminal")
+      }
+    }
+  }
+
+  @Section(title: "Add error handling and clean shutdown") {
+    @ContentAndMedia {
+      The spawn factory's `SpawnedClient` owns three lifetimes:
+      the QVACClient itself, the worker subprocess, and the UDS
+      server. `close()` tears them down in order.
+
+      Always wrap your client call site in `defer { ... }` (or
+      Swift `await ... close()` patterns) so a crash doesn't leak
+      the worker subprocess.
+    }
+
+    @Steps {
+      @Step {
+        Add `defer { Task { await client.close() } }` and a
+        `do/catch` around the work.
+
+        @Code(name: "Sources/QuickstartTutorial/main.swift", file: "quickstart-07-final.swift")
+      }
+    }
+
+    @Assessments {
+      @MultipleChoice {
+        Where does the actual model inference happen?
+
+        @Choice(isCorrect: false) {
+          In the Swift process.
+
+          @Justification(reaction: "Not quite.") {
+            QVACClient is just a typed wrapper over IPC. Inference
+            runs in the Bare worker.
+          }
+        }
+
+        @Choice(isCorrect: true) {
+          In a Bare worker hosting `@qvac/sdk`.
+
+          @Justification(reaction: "Right!") {
+            The Bare worker hosts the JS SDK which dispatches to
+            native llama.cpp / whisper / sdcpp / parakeet via N-API.
+          }
+        }
+      }
+
+      @MultipleChoice {
+        Which factory should you use on iOS?
+
+        @Choice(isCorrect: false) {
+          `QVACClient.spawning(...)`
+
+          @Justification(reaction: "Not on iOS.") {
+            iOS forbids spawning subprocesses. Use
+            ``QVACClient/embedded(initConfig:runtimeContext:)``
+            with `BareKitIPCTransport` instead.
+          }
+        }
+
+        @Choice(isCorrect: true) {
+          `QVACClient.embedded(...)`
+
+          @Justification(reaction: "Right!") {
+            `embedded()` hosts the worker in-process via
+            `BareKit.xcframework` — the only way to run on iOS.
+          }
+        }
+      }
+    }
+  }
+}

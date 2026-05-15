@@ -1,0 +1,172 @@
+@Tutorial(time: 25) {
+  @Intro(title: "Build a streaming chat with SwiftUI") {
+    Build a working chat app: SwiftUI message bubbles, streaming
+    tokens, a Cancel button, and proper error handling. Compiles
+    for both macOS and iOS (with the embedded factory once
+    YK-207 v2's worker bundle ships; macOS works today via spawn).
+
+    @Image(source: "chat-hero.png", alt: "Chat UI with streaming response")
+  }
+
+  @Section(title: "Model the chat state") {
+    @ContentAndMedia {
+      The chat needs three pieces of state:
+
+      - A `[Message]` history that grows as the user and assistant
+        exchange turns.
+      - A loading flag for the in-flight stream.
+      - A `Task<Void, Never>?` handle so the UI can cancel.
+    }
+
+    @Steps {
+      @Step {
+        Define the `Message` model and a `@Observable` view model.
+
+        @Code(name: "ChatViewModel.swift", file: "chat-01-viewmodel.swift")
+      }
+    }
+  }
+
+  @Section(title: "Wire up streaming completion") {
+    @ContentAndMedia {
+      ``QVACClient/completion(modelId:history:options:bufferSize:)``
+      returns an `AsyncThrowingStream<CompletionChunk, Error>`.
+      Each `.token(_)` chunk appends a substring to the assistant's
+      message; the terminal `.finish(_, _)` clears the loading
+      flag.
+
+      Wrap the stream consumer in a `Task` so the UI can hold a
+      handle to cancel it. The `for try await` loop checks
+      `Task.isCancelled` on every iteration; `break`-ing out
+      tears the underlying RPC stream down via the stream's
+      `onTermination` hook.
+    }
+
+    @Steps {
+      @Step {
+        Implement `sendMessage(_:)`. Append the user message,
+        launch the streaming task, append tokens as they arrive.
+
+        @Code(name: "ChatViewModel.swift", file: "chat-02-send.swift")
+      }
+
+      @Step {
+        Add `cancel()`. The active `Task.cancel()` triggers
+        `onTermination` in the AsyncStream which tears down the
+        RPC; for hard cancel (stop the worker too), call the
+        wire-level cancel.
+
+        @Code(name: "ChatViewModel.swift", file: "chat-03-cancel.swift")
+      }
+    }
+  }
+
+  @Section(title: "Build the SwiftUI view") {
+    @ContentAndMedia {
+      A simple SwiftUI view with a scrolling message list, a text
+      field, and a Send/Cancel button that toggles based on
+      `isStreaming`.
+
+      The view doesn't touch QVACClient directly — it owns the
+      `ChatViewModel` and reads `messages` + `isStreaming` from it.
+      That keeps the actor isolation clean and makes preview easy.
+    }
+
+    @Steps {
+      @Step {
+        Build `ChatView`. Message list, input row, send/cancel
+        button.
+
+        @Code(name: "ChatView.swift", file: "chat-04-view.swift")
+      }
+
+      @Step {
+        Wire the view model into the app entry point.
+
+        @Code(name: "ChatApp.swift", file: "chat-05-app.swift")
+      }
+    }
+  }
+
+  @Section(title: "Handle errors") {
+    @ContentAndMedia {
+      The streaming task can throw three flavors of error:
+
+      - ``QVACError/client(_:message:)`` — worker rejected the
+        request (bad args, model not loaded).
+      - ``QVACError/server(_:message:)`` — inference failed
+        mid-stream.
+      - ``QVACError/transport(_:)`` — the wire died.
+
+      Each surfaces in the view model's `error` property; the view
+      renders it in a banner.
+    }
+
+    @Steps {
+      @Step {
+        Add error handling around the stream consumer. The view
+        model exposes a typed `error: QVACError?` so the view can
+        render a banner without inspecting messages.
+
+        @Code(name: "ChatViewModel.swift", file: "chat-06-errors.swift")
+      }
+
+      @Step {
+        Render the error banner in `ChatView`. Tap-to-dismiss
+        clears the state.
+
+        @Code(name: "ChatView.swift", file: "chat-07-error-banner.swift")
+      }
+    }
+
+    @Assessments {
+      @MultipleChoice {
+        What happens when the user taps Cancel mid-stream?
+
+        @Choice(isCorrect: false) {
+          The worker keeps running, but Swift stops reading.
+
+          @Justification(reaction: "Half right.") {
+            Consumer-side cancel alone stops Swift reading. For the
+            worker to also stop, send the wire-level cancel via
+            ``QVACClient/cancel(_:)``.
+          }
+        }
+
+        @Choice(isCorrect: true) {
+          Both consumer and worker stop (with wire-level cancel).
+
+          @Justification(reaction: "Exactly!") {
+            `Task.cancel()` stops the Swift consumer, and the
+            explicit `client.cancel(operation:modelId:)` tells the
+            worker to abort. See <doc:Streaming> for the full path.
+          }
+        }
+      }
+
+      @MultipleChoice {
+        Which API would you use to stream a transcript instead of
+        a completion?
+
+        @Choice(isCorrect: false) {
+          `transcribe(modelId:audio:options:)`
+
+          @Justification(reaction: "Not quite.") {
+            That's the blocking version — returns the final
+            transcript only. Use `transcribeStream(...)` for
+            incremental partials.
+          }
+        }
+
+        @Choice(isCorrect: true) {
+          `transcribeStream(modelId:audio:options:bufferSize:)`
+
+          @Justification(reaction: "Right!") {
+            Same `AsyncThrowingStream` pattern as `completion`
+            — easy to drop into the chat UI shape.
+          }
+        }
+      }
+    }
+  }
+}

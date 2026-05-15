@@ -69,6 +69,11 @@ worker's job. The Swift side stays small and Apple-platform-friendly.
 
 ## Topics
 
+### Tutorials
+
+- <doc:Tutorial-Quickstart>
+- <doc:Tutorial-StreamingChat>
+
 ### Getting started
 
 - ``QVACClient/spawning(bareBinary:workerScript:initConfig:runtimeContext:acceptTimeout:)``

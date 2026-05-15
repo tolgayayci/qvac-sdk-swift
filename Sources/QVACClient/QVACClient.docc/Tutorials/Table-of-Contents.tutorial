@@ -1,0 +1,38 @@
+@Tutorials(name: "QVACClient") {
+  @Intro(title: "Build with QVAC AI on Apple platforms") {
+    Run Tether's QVAC AI runtime from Swift. Stream completions,
+    embed text, transcribe audio, generate images, and run RAG —
+    all on-device, no cloud round-trip.
+
+    These tutorials walk you from `import QVACClient` to a working
+    chat UI. By the end of the first tutorial you'll have a
+    streaming completion in your terminal; by the end of the
+    second, a SwiftUI chat that handles cancel and errors.
+  }
+
+  @Chapter(name: "Getting Started") {
+    Two tutorials. Start with Quickstart, then build something
+    real with Streaming Chat.
+
+    @Image(source: "tutorial-cover.png", alt: "QVACClient tutorial overview")
+
+    @TutorialReference(tutorial: "doc:Tutorial-Quickstart")
+    @TutorialReference(tutorial: "doc:Tutorial-StreamingChat")
+  }
+
+  @Resources {
+    Explore more.
+
+    @Documentation(destination: "https://github.com/tolgayayci/qvac-sdk-swift") {
+      The full source code is on GitHub.
+    }
+
+    @SampleCode(destination: "https://github.com/tolgayayci/qvac-sdk-swift/tree/main/Examples/QVACChat") {
+      - [QVACChat sample app](https://github.com/tolgayayci/qvac-sdk-swift/tree/main/Examples/QVACChat) — the finished chat from Tutorial 2.
+    }
+
+    @Forums(destination: "https://github.com/tolgayayci/qvac-sdk-swift/discussions") {
+      Questions, feature requests, and showcases.
+    }
+  }
+}
