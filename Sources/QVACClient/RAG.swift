@@ -73,6 +73,10 @@ public struct ChunkOptions: Sendable, Equatable {
 /// means the chunk was embedded and stored; `.rejected` carries
 /// the worker-side reason in `error`.
 public struct RAGProcessedItem: Codable, Sendable, Equatable {
+  /// Outcome of one document's ingest pipeline: `fulfilled` for
+  /// chunks the worker successfully embedded and stored; `rejected`
+  /// for chunks that failed (the reason is in the enclosing item's
+  /// `error` field).
   public enum Status: String, Codable, Sendable {
     case fulfilled
     case rejected

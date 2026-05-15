@@ -31,6 +31,9 @@ import Network
 /// one connection. After `accept()` resolves the listening socket
 /// is closed; reconnect requires a new `UDSServer`.
 public actor UDSServer {
+  /// Errors thrown by `UDSServer.listen()` / `accept()`. Wrap
+  /// POSIX failures (`errno` preserved) and Swift-level usage
+  /// errors (`acceptTimedOut`, `notListening`).
   public enum ServerError: Error, Sendable {
     case bindFailed(path: String, errno: Int32)
     case listenFailed(errno: Int32)

@@ -23,6 +23,8 @@ public struct AnyCodable: Codable, Sendable, Equatable {
     self.value = try AnyCodableValue.decode(from: container)
   }
 
+  /// `Encodable` conformance — delegates to `AnyCodableValue`'s
+  /// recursive encoder so any JSON-representable shape round-trips.
   public func encode(to encoder: Encoder) throws {
     var container = encoder.singleValueContainer()
     try value.encode(into: &container)

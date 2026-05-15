@@ -63,10 +63,15 @@ public struct JSONCodec: Codec {
     self.decoder = decoder
   }
 
+  /// Encode any `Encodable` to wire bytes via the configured
+  /// `JSONEncoder` (sorted keys, JSON output).
   public func encode<T: Encodable>(_ value: T) throws -> Data {
     return try encoder.encode(value)
   }
 
+  /// Decode wire bytes into the requested `Decodable` type via
+  /// the configured `JSONDecoder`. Throws standard `DecodingError`
+  /// shapes; callers typically wrap into `QVACError.transport(.decodingFailed)`.
   public func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
     return try decoder.decode(type, from: data)
   }
