@@ -1,0 +1,15 @@
+{
+  "name": "qvac-bench-js",
+  "version": "0.0.0",
+  "private": true,
+  "description": "JS counterpart benchmarks for the QVAC Swift client (YK-221). Same wire path, same prompts, same models — establishes the Swift overhead vs JS baseline.",
+  "type": "module",
+  "scripts": {
+    "bench:rpc": "node rpc.mjs",
+    "bench:embed": "node embed.mjs",
+    "bench:completion": "node completion.mjs"
+  },
+  "dependencies": {
+    "@qvac/sdk": "0.10.2"
+  }
+}

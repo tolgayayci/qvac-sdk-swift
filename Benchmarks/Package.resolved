@@ -1,0 +1,24 @@
+{
+  "originHash" : "256071afdc113feb93a4e1dcfedb0642121e9fbd1837c5702c290f75c484ecdc",
+  "pins" : [
+    {
+      "identity" : "bare-rpc-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/holepunchto/bare-rpc-swift.git",
+      "state" : {
+        "branch" : "3983622",
+        "revision" : "39836226aeb51d561d36201bf6b6d58a98e1272f"
+      }
+    },
+    {
+      "identity" : "compact-encoding-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/holepunchto/compact-encoding-swift",
+      "state" : {
+        "branch" : "main",
+        "revision" : "ab53958d0a5fb033d5dd30b821951b09a933c18a"
+      }
+    }
+  ],
+  "version" : 3
+}
