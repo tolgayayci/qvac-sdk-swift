@@ -493,6 +493,56 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
         await request.reply(data)
       }
 
+    case "pluginInvoke":
+      // YK-214. Echo the `params` back as `result` so generic
+      // round-trip tests can pass any Encodable shape and get the
+      // same shape back. The `handler` field is recorded on the
+      // behavior so tests can assert the routing.
+      let handler = (body?["handler"] as? String) ?? ""
+      let params = body?["params"] as Any?  // arbitrary shape
+      let reply: [String: Any] = [
+        "type": "pluginInvoke",
+        "result": Self.routePluginEcho(
+          handler: handler, params: params, behavior: behavior),
+      ]
+      let data = (try? JSONSerialization.data(
+        withJSONObject: reply, options: [.fragmentsAllowed])) ?? Data()
+      await request.reply(data)
+
+    case "pluginInvokeStream":
+      // YK-214. Emit `behavior.streamCount` chunks, then a terminal
+      // chunk with `done: true`. Each chunk's `result` is
+      // `{index: N, echoed: <params>}`.
+      guard let stream = await request.createResponseStream() else {
+        await request.reject("could not open stream", code: "E_STREAM", errno: -1)
+        return
+      }
+      let params = body?["params"] as Any?
+      let total = behavior.streamCount
+      for i in 0..<total {
+        var resultDict: [String: Any] = ["index": i]
+        if let params { resultDict["echoed"] = params }
+        let body: [String: Any] = [
+          "type": "pluginInvokeStream",
+          "result": resultDict,
+        ]
+        let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
+        var withNewline = data
+        withNewline.append(0x0A)
+        await stream.write(withNewline)
+      }
+      // Terminal frame with done:true.
+      let finalBody: [String: Any] = [
+        "type": "pluginInvokeStream",
+        "result": ["index": total, "done": true],
+        "done": true,
+      ]
+      let finalData = (try? JSONSerialization.data(withJSONObject: finalBody)) ?? Data()
+      var withNewline = finalData
+      withNewline.append(0x0A)
+      await stream.write(withNewline)
+      await stream.end()
+
     case "embed":
       // YK-203. Reply with `{type:"embed", success: true, embedding: [[...],
       // [...]]}`. The stub vector is just `[Double(i)]` per input — enough
@@ -632,5 +682,35 @@ private final class PeerDelegate: BareRPC.RPCDelegate, @unchecked Sendable {
     if let arr = value as? [String] { return arr }
     if let one = value as? String { return [one] }
     return nil
+  }
+
+  /// Compute the response body for a `pluginInvoke` request.
+  /// Defaults to echoing `params` so generic-type round-trip tests
+  /// see the same shape they sent. Special handlers wedge in
+  /// alternate behaviors for specific test scenarios.
+  static func routePluginEcho(
+    handler: String,
+    params: Any?,
+    behavior: QVACPeer.Behavior
+  ) -> Any {
+    switch handler {
+    case "uppercase":
+      // If params is a String, return its uppercase. Used by the
+      // typed-args round-trip test.
+      if let s = params as? String { return s.uppercased() }
+      if let dict = params as? [String: Any], let text = dict["text"] as? String {
+        return ["text": text.uppercased()]
+      }
+      return params ?? NSNull()
+    case "fail":
+      // Surface an error by returning a `success: false`-like shape.
+      // (Plugin failures land via the standard error path; this is
+      // a soft-failure echo for client-side decoding tests.)
+      return ["failed": true]
+    default:
+      // Default: echo params back. Falls back to `null` if params
+      // were omitted (no-args case).
+      return params ?? NSNull()
+    }
   }
 }
