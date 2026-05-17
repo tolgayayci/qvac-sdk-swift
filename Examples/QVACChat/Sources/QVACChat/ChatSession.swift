@@ -93,7 +93,7 @@ final class ChatSession {
     input = ""
 
     // Reserve a streaming assistant message that tokens append to.
-    var assistant = ChatMessageItem(
+    let assistant = ChatMessageItem(
       role: .assistant, content: "", isStreaming: true)
     let assistantId = assistant.id
     messages.append(assistant)
@@ -105,7 +105,7 @@ final class ChatSession {
         content: item.content)
     }
 
-    streamTask = Task { [weak self] in
+    streamTask = Task { @MainActor [weak self] in
       guard let self else { return }
       // bufferSize: nil disambiguates from the blocking overload —
       // the streaming variant returns AsyncThrowingStream while
@@ -117,15 +117,15 @@ final class ChatSession {
         for try await chunk in stream {
           if Task.isCancelled { break }
           if case .token(let token) = chunk {
-            await self.appendToken(token, to: assistantId)
+            self.appendToken(token, to: assistantId)
           }
         }
       } catch let err as QVACError {
-        await self.captureError(err)
+        self.captureError(err)
       } catch {
         // Cancellation lands here too — silent.
       }
-      await self.finishStreaming(messageId: assistantId)
+      self.finishStreaming(messageId: assistantId)
     }
   }
 
