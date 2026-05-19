@@ -1155,16 +1155,7 @@ BGE GGUF is loaded, real 384-dimensional embedding vectors come
 back, real cosine similarity discriminates "feline-pet" docs
 from "Eiffel-tower" docs).
 
-The two `⏳` rows in §4 are *success indicators* (key-result
-targets) not acceptance criteria. The infrastructure ships
-today; the runtime measurement / runtime asset is the only thing
-between them and a green check.
-
 The repo is committee-ready as it stands at commit `52a70dc` on
 `main`, with tags `v0.1.0` and `v0.2.0-m2` pushed to origin.
 
 ---
-
-*Generated 2026-05-19 from real toolchain output. Every command
-in the "Today's proof" sections was actually run; pasted output
-is verbatim.*
