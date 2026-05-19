@@ -15,7 +15,7 @@ import Foundation
 /// `Task.cancel` → `IncomingStream.destroy()` path so abandoning a
 /// `streamResponse` consumer cleans up correctly.
 ///
-/// Wire conventions (per `docs/qvac-sdk-internals.md` §8 + `docs/bare-rpc-wire-protocol.md` §8):
+/// Wire conventions (per `docs/qvac-sdk-internals.md` §8 + `docs/bare-rpc-wire.md` §8):
 /// - Request `data` is UTF-8 JSON.
 /// - Streaming response chunks are newline-delimited JSON; the bridge buffers
 ///   across `bare-rpc` `STREAM|DATA` frames and splits on `\n` before decoding.

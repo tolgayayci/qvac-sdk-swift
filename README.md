@@ -108,7 +108,7 @@ do {
 ## Documentation
 
 - **API reference (DocC)** — `xcodebuild docbuild -scheme QVACClient -derivedDataPath build/docbuild` then open `QVACClient.doccarchive` in Xcode. Hosted: `https://tolgayayci.github.io/qvac-sdk-swift/documentation/qvacclient/`.
-- **Deep dives** — [architecture](./docs/qvac-sdk-internals.md) · [wire protocol](./docs/bare-rpc-wire-protocol.md) · [BareKit](./docs/barekit.md) · [streaming](./Sources/QVACClient/QVACClient.docc/Streaming.md) · [RAG](./Sources/QVACClient/QVACClient.docc/RAG.md) · [plugins](./Sources/QVACClient/QVACClient.docc/PluginAuthoring.md).
+- **Deep dives** — [architecture](./docs/qvac-sdk-internals.md) · [wire protocol](./docs/bare-rpc-wire.md) · [BareKit](./docs/barekit.md) · [streaming](./Sources/QVACClient/QVACClient.docc/Streaming.md) · [RAG](./Sources/QVACClient/QVACClient.docc/RAG.md) · [plugins](./Sources/QVACClient/QVACClient.docc/PluginAuthoring.md).
 
 ## Platform support
 

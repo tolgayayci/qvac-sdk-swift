@@ -35,12 +35,12 @@
 
     func testBareRpcWireProtocolDocCoversBaseline() throws {
       let docURL = SDKVersionTest.repositoryRoot.appendingPathComponent(
-        "docs/bare-rpc-wire-protocol.md")
+        "docs/bare-rpc-wire.md")
       let contents = try String(contentsOf: docURL, encoding: .utf8)
 
       XCTAssertTrue(
         contents.contains("bare-rpc") && contents.contains("1.3.1"),
-        "bare-rpc-wire-protocol.md must pin the bare-rpc version examined")
+        "bare-rpc-wire.md must pin the bare-rpc version examined")
       XCTAssertTrue(
         contents.contains("compact-encoding"),
         "Frame primitive (compact-encoding) reference must remain")

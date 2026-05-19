@@ -87,8 +87,8 @@ placeholder:** 935.
 > 6 weeks across 3 milestones (M1 → M3), targeting completion **before
 > the 2026-06-24 deadline**. M1 (code-gen + IPC transport) is already
 > built locally and ready to push the moment the application is
-> accepted — `docs/m1-summary.md` in the proposal is the gate
-> evidence. M2 (core API surface) and M3 (RAG + plugins + DocC +
+> accepted — `docs/qvac-sdk-deliverables-verification.md` is the
+> gate evidence. M2 (core API surface) and M3 (RAG + plugins + DocC +
 > example app + release) are sequenced day-by-day in the proposal.
 
 ### Field: **Milestones** (if the form asks for a structured breakdown)

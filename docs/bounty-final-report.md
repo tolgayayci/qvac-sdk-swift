@@ -178,7 +178,7 @@ done
 | SPM test target | `.testTarget(name: "QVACClientTests", ...)` | `swift test` |
 | Tag-based versioning | `git tag -a v0.1.0` annotated tag created locally (commit `d6b230b`); push on application acceptance | `git tag -n5 v0.1.0` |
 | SPI manifest | `.spi.yml` at repo root | `cat .spi.yml` |
-| SPI submission guidance | `docs/m3-summary.md` "What pushing requires" + this doc §3.3 | reads cover the swiftpackageindex.com flow |
+| SPI submission guidance | `.spi.yml` manifest + this doc §3.3 + `docs/qvac-sdk-deliverables-verification.md` §1.5 | reads cover the swiftpackageindex.com flow |
 
 ### 1.6 Platform support
 
@@ -263,9 +263,9 @@ xcodebuild -scheme QVACClient \
 | Unit tests | `UDSTransportTest` + `UDSEchoFixture` | YK-185 |
 | Real-fixture ping (bonus) | `PingServerHarness` + `PingIntegrationTests` | YK-191, YK-192 |
 | CI | `.github/workflows/ci.yml` `codegen-ts` + `codegen-drift` + `swift-macos` jobs | YK-193, YK-194 |
-| Milestone gate doc | `docs/m1-summary.md` | YK-195 |
+| Milestone gate doc | `docs/qvac-sdk-deliverables-verification.md` §2 (M1 row) | YK-195 |
 
-**M1 milestone tag:** `v0.1.0-m1` (referenced in `docs/m1-summary.md`); not pushed yet.
+**M1 milestone tag:** `v0.1.0-m1` (referenced in `docs/qvac-sdk-deliverables-verification.md`); not pushed yet.
 
 **M1 Linear issues:** YK-174 → YK-195 — **17 closed, 4 cancelled as duplicates** (YK-186, YK-187, YK-188, YK-189), 1 duplicate (YK-190). All non-duplicate work Done.
 
@@ -290,7 +290,7 @@ xcodebuild -scheme QVACClient \
 | Spawn factory | `Sources/QVACClient/QVACClient+Factories.swift` (`QVACClient.spawning(...)`) | `SpawningFactoryTest`, `RealModelIntegrationTest` |
 | Worker fixture | `Tests/Fixtures/qvac-worker/` (real `@qvac/sdk` 0.10.2) | `QVACWorkerHarnessTest` |
 | iOS CI | `.github/workflows/ci.yml` `swift-ios` job | runs on every PR |
-| M2 gate doc | `docs/m2-summary.md` | YK-211 |
+| M2 gate doc | `docs/qvac-sdk-deliverables-verification.md` §2 (M2 row) | YK-211 |
 
 **M2 milestone tag:** `v0.2.0-m2` annotated tag created locally on commit `42f2b66`.
 
@@ -320,9 +320,9 @@ xcodebuild -scheme QVACClient \
 | DocC tutorials | `Sources/QVACClient/QVACClient.docc/Tutorials/` (2 `.tutorial` files + 14 snippet files) | included in archive |
 | GH Pages hosting | `.github/workflows/docc.yml` + `docs/docc-hosting.md` | workflow wired; deploys on push to main |
 | SwiftUI example | `Examples/QVACChat/` | `swift build` clean |
-| SPI guidance | `.spi.yml` + `docs/m3-summary.md` + this report §3.3 | `.spi.yml` parses clean |
+| SPI guidance | `.spi.yml` + this report §3.3 + `docs/qvac-sdk-deliverables-verification.md` §1.5 | `.spi.yml` parses clean |
 | Perf benchmark harness | `Benchmarks/` (Swift + JS counterparts + `compare.mjs`) + `docs/perf/baseline.md` | rpc smoke: 200 RTTs in 7.23ms |
-| M3 gate doc | `docs/m3-summary.md` | YK-224 |
+| M3 gate doc | `docs/qvac-sdk-deliverables-verification.md` §2 (M3 row) | YK-224 |
 
 **M3 release tag:** `v0.1.0` annotated tag created locally on commit `d6b230b`.
 
@@ -582,10 +582,11 @@ device run) are **success indicators** — key-result targets — not
 acceptance criteria. The infrastructure for both is ready.
 
 The repository is committee-ready. Once the bounty application
-(YK-229) is accepted and the user executes the five mechanical
-steps in `docs/m3-summary.md` (`git push`, `git push --tags`,
-`gh release create`, enable Pages, submit to SPI), the public
-surface goes live with no further code work.
+(YK-229) is accepted, the standard release-publishing steps
+(`git push`, `git push --tags`, `gh release create`, enable
+Pages, submit to SPI) take the public surface live with no
+further code work. Step-by-step instructions live in
+`docs/qvac-sdk-deliverables-verification.md` §6 and `.spi.yml`.
 
 ---
 

@@ -407,9 +407,12 @@ metadata:
   authors: "Tolga Yaycı"
 ```
 
-Submission instructions live in `docs/m3-summary.md` "What
-pushing requires" (5 steps total; SPI submission is one
-swiftpackageindex.com paste).
+Submission flow (5 steps total once the application is
+accepted): `git push origin main` → `git push origin v0.1.0` →
+`gh release create v0.1.0 --notes-file CHANGELOG.md` → enable
+GitHub Pages (Settings → Pages → Source: GitHub Actions) →
+paste the repo URL into <https://swiftpackageindex.com/add-a-package>.
+SPI auto-detects `.spi.yml`.
 
 #### Proof it works (today)
 
@@ -1065,8 +1068,8 @@ today because there's no `qvac-worker.bundle` SPM resource yet
 — that resource is a `bare-pack`-produced bundle of the QVAC
 worker.js entry, tracked as YK-207 v2.
 
-Both deferrals are noted explicitly in `docs/m3-summary.md`
-"What's deferred" — no silent gaps.
+Both deferrals are noted explicitly in this report's §6 — no
+silent gaps.
 
 ---
 

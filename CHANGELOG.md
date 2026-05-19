@@ -96,9 +96,9 @@ Hits the bounty's full DoD for milestones 1 and 2; M3 ships the
   articles (overview, Transports, ErrorHandling, Streaming, RAG,
   PluginAuthoring), 2 interactive tutorials (Quickstart +
   StreamingChat).
-- `docs/m1-summary.md`, `docs/m2-summary.md`, `docs/m3-summary.md`
-  — milestone gate evidence.
-- `docs/qvac-sdk-internals.md`, `docs/bare-rpc-wire-protocol.md`
+- `docs/qvac-sdk-deliverables-verification.md` — full delivery
+  report cross-referencing every bounty deliverable to evidence.
+- `docs/qvac-sdk-internals.md`, `docs/bare-rpc-wire.md`
   — full wire-protocol reference.
 - `docs/barekit.md`, `docs/embedding.md`, `docs/cancellation.md`,
   `docs/backpressure.md`, `docs/docc-hosting.md`,

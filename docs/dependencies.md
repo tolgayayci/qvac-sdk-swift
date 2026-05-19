@@ -41,7 +41,7 @@ QVACClient
 | Trigger | Required follow-up |
 | --- | --- |
 | Upstream `@qvac/sdk` minor bump | Re-run codegen (`pnpm run run` in `scripts/codegen/`). Re-verify `docs/qvac-sdk-internals.md` byte counts. Run full Swift test suite. Update CHANGELOG. |
-| Upstream `bare-rpc-swift` change | Re-run `swift test` against the new revision. Re-verify the byte-exact hex fixtures in `docs/bare-rpc-wire-protocol.md` §9 — any frame layout change must be caught here. |
+| Upstream `bare-rpc-swift` change | Re-run `swift test` against the new revision. Re-verify the byte-exact hex fixtures in `docs/bare-rpc-wire.md` §9 — any frame layout change must be caught here. |
 | Upstream `bare-kit-swift` change | (M2+) Re-run YK-206 integration tests on iOS Simulator + macOS. |
 | Major version bump on **any** dep | RFC required: open an issue, update this doc, and run a milestone-gate verification (YK-195 / YK-211 / YK-224) before merging. |
 

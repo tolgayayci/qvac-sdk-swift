@@ -18,7 +18,7 @@ during DocC build.
 pipeline plumbs the framework search path correctly through symbol
 extraction. The trade-off is a macOS runner (which we already have
 in CI) instead of a portable Linux build. Documented as the
-accepted approach in `docs/m2-summary.md`.
+accepted approach in `docs/qvac-sdk-deliverables-verification.md` §1.7.
 
 ## Workflow shape
 

@@ -181,8 +181,8 @@ saturated. Mapped end-to-end in M2 (YK-199).
 ### M1 — already shipped locally
 
 Held private until application acceptance, then pushed and tagged
-`v0.1.0-m1`. See `docs/m1-summary.md` for the gate evidence and the
-exact command sequence.
+`v0.1.0-m1`. See `docs/qvac-sdk-deliverables-verification.md` for
+the gate evidence and the exact command sequence.
 
 | What | Where | Numbers |
 | --- | --- | --- |
@@ -192,7 +192,7 @@ exact command sequence.
 | RPC bridge | `Sources/QVACClient/RPC/RPCBridge.swift` | actor wrapping `BareRPC.RPC`; 79% region / 86% line cov |
 | Integration | `Tests/QVACClientTests/Integration/PingIntegrationTests.swift` | 5 E2E tests against a real Bare worker fixture — PING / 250 sequential / 50 concurrent / bridge close / server-kill-mid-flight |
 | CI | `.github/workflows/ci.yml` | 3 jobs: codegen-ts (Ubuntu, vitest + smoke), swift-macos (macOS-14 ARM64, build + test + LCOV coverage upload), codegen-drift (Ubuntu, two-gate diff check) |
-| Docs | `docs/` | `qvac-sdk-internals.md` (1,185 lines — pinned `@qvac/sdk@0.10.2` commit `9db6f98`), `bare-rpc-wire-protocol.md` (634 lines — 24 hex-exact frame fixtures), `dependencies.md`, `codegen.md`, `codegen-deferred.md`, `m1-summary.md`, `application/{open-questions,form-answers,proposal}.md` |
+| Docs | `docs/` | `qvac-sdk-internals.md` (1,185 lines — pinned `@qvac/sdk@0.10.2` commit `9db6f98`), `bare-rpc-wire.md` (634 lines — 24 hex-exact frame fixtures), `dependencies.md`, `codegen.md`, `codegen-deferred.md`, `qvac-sdk-deliverables-verification.md`, `application/{open-questions,form-answers,proposal}.md` |
 | Aggregate test count | `swift test` | 67 / 67 pass, zero flake across 3 consecutive runs |
 | Coverage on hand-written code | LCOV | lines **86.3%** / regions **76.4%** / functions **86.4%** (excludes generated output) |
 
@@ -350,11 +350,11 @@ references:
 | Doc | What it covers |
 | --- | --- |
 | `docs/qvac-sdk-internals.md` | 1,185 lines. SDK wire model: 31 request types, 116 error codes, `__init_config` handshake, per-method shapes. Pinned to `@qvac/sdk@0.10.2` commit `9db6f98`. |
-| `docs/bare-rpc-wire-protocol.md` | 634 lines. Byte-level frame layout, OPEN handshake, PAUSE/RESUME backpressure, end-of-stream vs destroy, 24 hex-exact fixtures verified by `InteropFixturesTests`. |
+| `docs/bare-rpc-wire.md` | 634 lines. Byte-level frame layout, OPEN handshake, PAUSE/RESUME backpressure, end-of-stream vs destroy, 24 hex-exact fixtures verified by `InteropFixturesTests`. |
 | `docs/dependencies.md` | Pin policy + dependency tree + swift-format/Node/pnpm version requirements. |
 | `docs/codegen.md` | How to run the codegen pipeline; recovery steps when CI's drift check fires. |
 | `docs/codegen-deferred.md` | The set of `@qvac/sdk` types currently routed through `AnyCodable`; drained by M2/M3 codegen passes. |
-| `docs/m1-summary.md` | M1 reviewer-facing handoff: bounty deliverables × evidence × commit references. |
+| `docs/qvac-sdk-deliverables-verification.md` | Full delivery report: bounty deliverables × evidence × commit references × today's verification commands. |
 | `docs/diagrams/architecture.{mmd,svg,png}` | The diagram embedded in §4. Mermaid source + rendered exports. |
 | `docs/application/open-questions.md` | The 12 questions referenced in §10. |
 | `docs/application/form-answers.md` | The application form's prepared answers. |

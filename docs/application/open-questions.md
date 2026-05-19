@@ -51,7 +51,7 @@ there. We can publish under our org and transfer if that's easier on your side.
 **Context.** We're holding all public artifacts (tag, release, review PR)
 until the application is accepted, so we know which org to push to. Once we
 know, we can cut `v0.1.0-m1` in seconds — the tag command is in
-`docs/m1-summary.md`.
+`docs/qvac-sdk-deliverables-verification.md`.
 
 **Question.** What org should the repo live in, and what GitHub username(s)
 need write access from your side for reviewing the M1 PR?
